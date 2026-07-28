@@ -1,0 +1,12 @@
+node_modules
+dist
+.env
+.env.local
+frontend/.env
+frontend/dist
+frontend/node_modules
+.vercel
+.DS_Store
+__pycache__
+*.pyc
+.pytest_cache
