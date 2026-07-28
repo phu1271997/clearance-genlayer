@@ -352,9 +352,12 @@ Decision guide:
     @gl.public.view
     def list_works(self) -> list:
         out = []
-        for wid in self.works:
-            w = self.works[wid]
-            out.append({"id": w.id, "artist": w.artist, "title": w.title})
+        count = int(self.next_work_id)
+        for i in range(count):
+            wid = str(i)
+            if wid in self.works:
+                w = self.works[wid]
+                out.append({"id": w.id, "artist": w.artist, "title": w.title})
         return out
 
     @gl.public.view
