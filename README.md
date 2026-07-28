@@ -82,8 +82,8 @@ GenLayer non-deterministic execution requires consensus among validator nodes. B
 ## Deployed Contract
 
 - **Network:** GenLayer Studio Network (`studionet`, Chain ID: `61999` / `0xF1EF`)
-- **Contract Address:** [`0x898f75174791b9DC6F6e38DC18EAbDDC51141E4B`](https://genlayer-explorer.vercel.app/address/0x898f75174791b9DC6F6e38DC18EAbDDC51141E4B)
-- **Block Explorer:** [GenLayer Explorer - Contract 0x898f75174791b9DC6F6e38DC18EAbDDC51141E4B](https://genlayer-explorer.vercel.app/address/0x898f75174791b9DC6F6e38DC18EAbDDC51141E4B)
+- **Contract Address:** [`0x6D7F886071935061B3C1C69DaA0ddb1d143Ced8E`](https://genlayer-explorer.vercel.app/address/0x6D7F886071935061B3C1C69DaA0ddb1d143Ced8E)
+- **Block Explorer:** [GenLayer Explorer - Contract 0x6D7F886071935061B3C1C69DaA0ddb1d143Ced8E](https://genlayer-explorer.vercel.app/address/0x6D7F886071935061B3C1C69DaA0ddb1d143Ced8E)
 
 ---
 
@@ -116,7 +116,7 @@ GenLayer non-deterministic execution requires consensus among validator nodes. B
 ```bash
 cd frontend
 cp .env.example .env
-# Set VITE_CONTRACT_ADDRESS=0x898f75174791b9DC6F6e38DC18EAbDDC51141E4B
+# Set VITE_CONTRACT_ADDRESS=0x6D7F886071935061B3C1C69DaA0ddb1d143Ced8E
 npm install
 npm run dev
 ```
