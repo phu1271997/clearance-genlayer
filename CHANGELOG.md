@@ -5,6 +5,8 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.1.0] — 2026-07-30
 
+**Deployed on studionet:** [`0xD1cbE5E47ebaE8a2c879913801ee275cfDbd0356`](https://genlayer-explorer.vercel.app/address/0xD1cbE5E47ebaE8a2c879913801ee275cfDbd0356)
+
 **Milestone submission:** *Security Hardening Bundle v1 + AI Enhancement +
 Appeal Flow + Owner Sweep.*
 
