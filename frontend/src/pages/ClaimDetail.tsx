@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { makeClient, CONTRACT_ADDRESS } from '../lib/genlayer';
+import { makeClient, CONTRACT_ADDRESS, awaitTxFinalized } from '../lib/genlayer';
 import { Claim, Work } from '../lib/types';
 import { useWallet } from '../context/WalletContext';
 import { VerdictCard } from '../components/VerdictCard';
@@ -111,25 +111,15 @@ export const ClaimDetail: React.FC = () => {
 
       if (typeof txHash === 'string') setPendingTxHash(txHash);
 
-      const startTime = Date.now();
-      while (Date.now() - startTime < 60000) {
-        await new Promise((r) => setTimeout(r, 3000));
-        try {
-          const updated = await client.readContract({
-            address: CONTRACT_ADDRESS as `0x${string}`,
-            functionName: 'get_claim',
-            args: [claimId],
-          }) as unknown as Claim;
+      await awaitTxFinalized(client, txHash as `0x${string}`);
 
-          if (updated && updated.status !== 'PENDING') {
-            setClaim(updated);
-            setSuccessMsg(`Adjudication finalized with verdict: ${updated.status}!`);
-            break;
-          }
-        } catch (e) {
-          console.warn('Polling adjudication status...', e);
-        }
-      }
+      const updated = await client.readContract({
+        address: CONTRACT_ADDRESS as `0x${string}`,
+        functionName: 'get_claim',
+        args: [claimId],
+      }) as unknown as Claim;
+      setClaim(updated);
+      setSuccessMsg(`Adjudication finalized with verdict: ${updated.status}!`);
       await fetchClaimAndWork();
     } catch (err: any) {
       console.error(err);
@@ -182,24 +172,15 @@ export const ClaimDetail: React.FC = () => {
 
       if (typeof txHash === 'string') setPendingTxHash(txHash);
 
-      const startTime = Date.now();
-      while (Date.now() - startTime < 30000) {
-        await new Promise((r) => setTimeout(r, 2000));
-        try {
-          const updated = await client.readContract({
-            address: CONTRACT_ADDRESS as `0x${string}`,
-            functionName: 'get_claim',
-            args: [claimId],
-          }) as unknown as Claim;
-          if (updated && updated.distributed) {
-            setClaim(updated);
-            setSuccessMsg('Royalties successfully distributed on-chain!');
-            break;
-          }
-        } catch (e) {
-          console.warn('Polling distribution status...', e);
-        }
-      }
+      await awaitTxFinalized(client, txHash as `0x${string}`);
+
+      const updated = await client.readContract({
+        address: CONTRACT_ADDRESS as `0x${string}`,
+        functionName: 'get_claim',
+        args: [claimId],
+      }) as unknown as Claim;
+      setClaim(updated);
+      if (updated.distributed) setSuccessMsg('Royalties successfully distributed on-chain!');
       await fetchClaimAndWork();
     } catch (err: any) {
       console.error(err);
@@ -242,24 +223,15 @@ export const ClaimDetail: React.FC = () => {
       });
       if (typeof txHash === 'string') setPendingTxHash(txHash);
 
-      const startTime = Date.now();
-      while (Date.now() - startTime < 90000) {
-        await new Promise((r) => setTimeout(r, 3000));
-        try {
-          const updated = await client.readContract({
-            address: CONTRACT_ADDRESS as `0x${string}`,
-            functionName: 'get_claim',
-            args: [claimId],
-          }) as unknown as Claim;
-          if (updated && updated.status !== 'PENDING' && updated.appeals > (claim.appeals ?? 0)) {
-            setClaim(updated);
-            setSuccessMsg(`Appeal finalized — new verdict: ${updated.status}`);
-            break;
-          }
-        } catch (e) {
-          console.warn('Polling appeal status...', e);
-        }
-      }
+      await awaitTxFinalized(client, txHash as `0x${string}`);
+
+      const updated = await client.readContract({
+        address: CONTRACT_ADDRESS as `0x${string}`,
+        functionName: 'get_claim',
+        args: [claimId],
+      }) as unknown as Claim;
+      setClaim(updated);
+      setSuccessMsg(`Appeal finalized — new verdict: ${updated.status}`);
       await fetchClaimAndWork();
     } catch (err: any) {
       console.error(err);

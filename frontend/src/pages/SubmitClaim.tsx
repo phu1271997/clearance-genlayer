@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { makeClient, CONTRACT_ADDRESS } from '../lib/genlayer';
+import { makeClient, CONTRACT_ADDRESS, awaitTxFinalized } from '../lib/genlayer';
 import { Work } from '../lib/types';
 import { useWallet } from '../context/WalletContext';
 import { PendingBanner } from '../components/PendingBanner';
@@ -87,33 +87,24 @@ export const SubmitClaim: React.FC = () => {
         setPendingTxHash(txHash);
       }
 
-      // Re-read contract state to verify completion & find new claim ID
-      let foundClaimId: string | null = null;
-      const startTime = Date.now();
-      while (Date.now() - startTime < 60000) {
-        try {
-          const claims = await client.readContract({
-            address: CONTRACT_ADDRESS as `0x${string}`,
-            functionName: 'list_claims_for_work',
-            args: [workId],
-          }) as unknown as any[];
+      await awaitTxFinalized(client, txHash as `0x${string}`);
 
-          if (Array.isArray(claims) && claims.length > 0) {
-            const latest = claims[claims.length - 1];
-            foundClaimId = String(latest.id);
-            break;
-          }
-        } catch (e) {
-          console.warn('Polling claims...', e);
+      let foundClaimId: string | null = null;
+      for (let i = 0; i < 4 && !foundClaimId; i++) {
+        const claims = await client.readContract({
+          address: CONTRACT_ADDRESS as `0x${string}`,
+          functionName: 'list_claims_for_work',
+          args: [workId],
+        }) as unknown as any[];
+        if (Array.isArray(claims) && claims.length > 0) {
+          foundClaimId = String(claims[claims.length - 1].id);
         }
-        await new Promise((r) => setTimeout(r, 2500));
+        if (!foundClaimId) await new Promise((r) => setTimeout(r, 2000));
       }
 
       if (foundClaimId !== null) {
         setCreatedClaimId(foundClaimId);
-        setTimeout(() => {
-          navigate(`/claim/${foundClaimId}`);
-        }, 1500);
+        setTimeout(() => navigate(`/claim/${foundClaimId}`), 1500);
       } else {
         navigate(`/works/${workId}`);
       }

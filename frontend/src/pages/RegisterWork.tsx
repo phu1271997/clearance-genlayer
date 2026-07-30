@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { makeClient, CONTRACT_ADDRESS } from '../lib/genlayer';
+import { makeClient, CONTRACT_ADDRESS, awaitTxFinalized } from '../lib/genlayer';
 import { useWallet } from '../context/WalletContext';
 import { PendingBanner } from '../components/PendingBanner';
 import { PlusCircle, FileText, Globe, Music, AlertCircle, ArrowLeft, CheckCircle } from 'lucide-react';
@@ -63,36 +63,28 @@ export const RegisterWork: React.FC = () => {
         setPendingTxHash(txHash);
       }
 
-      // Re-read contract state to verify completion
+      // Wait for consensus and check the leader-receipt execution_result.
+      // Throws with the on-chain traceback if execution_result !== SUCCESS.
+      await awaitTxFinalized(client, txHash as `0x${string}`);
+
+      // Refresh state — find the freshly created work by title match
       let fetchedId: string | null = null;
-      const startTime = Date.now();
-      while (Date.now() - startTime < 60000) {
-        try {
-          const works = await client.readContract({
-            address: CONTRACT_ADDRESS as `0x${string}`,
-            functionName: 'list_works',
-            args: [],
-          }) as unknown as any[];
-          
-          if (Array.isArray(works) && works.length > 0) {
-            // Find latest matching work
-            const match = works.slice().reverse().find((w: any) => w.title === title.trim());
-            if (match) {
-              fetchedId = String(match.id);
-              break;
-            }
-          }
-        } catch (e) {
-          console.warn('Polling list_works...', e);
+      for (let i = 0; i < 4 && !fetchedId; i++) {
+        const works = await client.readContract({
+          address: CONTRACT_ADDRESS as `0x${string}`,
+          functionName: 'list_works',
+          args: [],
+        }) as unknown as any[];
+        if (Array.isArray(works) && works.length > 0) {
+          const match = works.slice().reverse().find((w: any) => w.title === title.trim());
+          if (match) fetchedId = String(match.id);
         }
-        await new Promise((r) => setTimeout(r, 2500));
+        if (!fetchedId) await new Promise((r) => setTimeout(r, 2000));
       }
 
       if (fetchedId !== null) {
         setCreatedId(fetchedId);
-        setTimeout(() => {
-          navigate(`/works/${fetchedId}`);
-        }, 1500);
+        setTimeout(() => navigate(`/works/${fetchedId}`), 1500);
       } else {
         navigate('/works');
       }
