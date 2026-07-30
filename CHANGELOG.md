@@ -5,6 +5,8 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.1.1] — 2026-07-30 (hotfix)
 
+**Deployed on studionet:** [`0x5832270783938d0559BdeD7b9D8AD807b7C2D0E3`](https://genlayer-explorer.vercel.app/address/0x5832270783938d0559BdeD7b9D8AD807b7C2D0E3)
+
 ### Fixed (critical — every write reverted)
 
 - `register_work()` and `submit_claim()` reverted on every call with
@@ -29,11 +31,13 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `SubmitClaim`, and `ClaimDetail` now surface real revert reasons in
   the UI instead of polling an empty state until timeout.
 
-### Requires redeploy
+### Redeployed
 
-Contract storage layout changed. `0xD1cbE5E47ebaE8a2c879913801ee275cfDbd0356`
-(v1.1.0) is superseded — deploy `contracts/clearance.py` again and
-update `VITE_CONTRACT_ADDRESS`.
+Contract storage layout changed. v1.1.0
+(`0xD1cbE5E47ebaE8a2c879913801ee275cfDbd0356`) is superseded by v1.1.1
+at `0x5832270783938d0559BdeD7b9D8AD807b7C2D0E3`; `VITE_CONTRACT_ADDRESS`
+in `frontend/.env` and in the Vercel production env have been rotated
+to the new address.
 
 ---
 

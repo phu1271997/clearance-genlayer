@@ -122,7 +122,7 @@ a custom semantic `validator_fn` inside `gl.vm.run_nondet`:
 ## Deployed Contract
 
 - **Network:** GenLayer Studio Network (`studionet`, Chain ID `61999` / `0xF1EF`)
-- **Contract (v1.1.1 — current):** *pending redeploy of the hotfixed `contracts/clearance.py`*
+- **Contract (v1.1.1 — current):** [`0x5832270783938d0559BdeD7b9D8AD807b7C2D0E3`](https://genlayer-explorer.vercel.app/address/0x5832270783938d0559BdeD7b9D8AD807b7C2D0E3)
 - **Contract (v1.1.0 — deprecated):** `0xD1cbE5E47ebaE8a2c879913801ee275cfDbd0356` (writes revert — see CHANGELOG 1.1.1)
 - **Contract (v1.0.0 — deprecated):** `0x6D7F886071935061B3C1C69DaA0ddb1d143Ced8E`
 - **Block Explorer:** https://genlayer-explorer.vercel.app
@@ -161,7 +161,7 @@ a custom semantic `validator_fn` inside `gl.vm.run_nondet`:
 ```bash
 cd frontend
 cp .env.example .env
-# Set VITE_CONTRACT_ADDRESS=0xD1cbE5E47ebaE8a2c879913801ee275cfDbd0356
+# Set VITE_CONTRACT_ADDRESS=0x5832270783938d0559BdeD7b9D8AD807b7C2D0E3
 # (or your own after redeploying to studionet)
 npm install
 npm run dev
