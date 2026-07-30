@@ -5,7 +5,11 @@ import { Claim, Work } from '../lib/types';
 import { useWallet } from '../context/WalletContext';
 import { VerdictCard } from '../components/VerdictCard';
 import { PendingBanner } from '../components/PendingBanner';
-import { Cpu, Scale, Coins, ArrowLeft, RefreshCw, ExternalLink, Globe, FileText, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Cpu, Scale, Coins, ArrowLeft, RefreshCw, ExternalLink, Globe, FileText, CheckCircle2, AlertCircle, ShieldAlert, Gavel } from 'lucide-react';
+
+const SETTLEMENT_MIN_GEN_FALLBACK = 0.1;
+const APPEAL_STAKE_MULTIPLIER_FALLBACK = 2;
+const MAX_APPEALS_FALLBACK = 2;
 
 export const ClaimDetail: React.FC = () => {
   const { claimId } = useParams<{ claimId: string }>();
@@ -19,10 +23,15 @@ export const ClaimDetail: React.FC = () => {
 
   const [isAdjudicating, setIsAdjudicating] = useState<boolean>(false);
   const [isDistributing, setIsDistributing] = useState<boolean>(false);
+  const [isAppealing, setIsAppealing] = useState<boolean>(false);
   const [pendingTxHash, setPendingTxHash] = useState<string | undefined>(undefined);
   const [distributeAmount, setDistributeAmount] = useState<string>('0.1'); // 0.1 GEN
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const [settlementMinGen, setSettlementMinGen] = useState<number>(SETTLEMENT_MIN_GEN_FALLBACK);
+  const [appealMultiplier, setAppealMultiplier] = useState<number>(APPEAL_STAKE_MULTIPLIER_FALLBACK);
+  const [maxAppeals, setMaxAppeals] = useState<number>(MAX_APPEALS_FALLBACK);
 
   const fetchClaimAndWork = useCallback(async () => {
     if (!claimId || !CONTRACT_ADDRESS) return;
@@ -52,9 +61,31 @@ export const ClaimDetail: React.FC = () => {
     }
   }, [claimId]);
 
+  const fetchConfig = useCallback(async () => {
+    if (!CONTRACT_ADDRESS) return;
+    try {
+      const client = makeClient();
+      const cfg = await client.readContract({
+        address: CONTRACT_ADDRESS as `0x${string}`,
+        functionName: 'get_config',
+        args: [],
+      }) as any;
+      if (cfg?.settlement_min) {
+        setSettlementMinGen(Number(BigInt(cfg.settlement_min)) / 1e18);
+      }
+      if (cfg?.appeal_stake_multiplier) setAppealMultiplier(Number(cfg.appeal_stake_multiplier));
+      if (cfg?.max_appeals) setMaxAppeals(Number(cfg.max_appeals));
+    } catch (e) {
+      // Older contract w/o get_config — keep fallbacks
+    }
+  }, []);
+
   useEffect(() => {
     fetchClaimAndWork();
-  }, [fetchClaimAndWork]);
+    fetchConfig();
+  }, [fetchClaimAndWork, fetchConfig]);
+
+  const isRemixer = !!(address && claim && address.toLowerCase() === claim.remixer.toLowerCase());
 
   // Handle Adjudicate action
   const handleAdjudicate = async () => {
@@ -78,11 +109,8 @@ export const ClaimDetail: React.FC = () => {
         value: BigInt(0),
       });
 
-      if (typeof txHash === 'string') {
-        setPendingTxHash(txHash);
-      }
+      if (typeof txHash === 'string') setPendingTxHash(txHash);
 
-      // Poll contract state until status moves away from PENDING or up to 60s
       const startTime = Date.now();
       while (Date.now() - startTime < 60000) {
         await new Promise((r) => setTimeout(r, 3000));
@@ -111,17 +139,28 @@ export const ClaimDetail: React.FC = () => {
     }
   };
 
-  // Handle Distribute action
+  // Handle Distribute action (v1.1.0: remixer-only, >= SETTLEMENT_MIN)
   const handleDistribute = async () => {
     if (!isConnected || !address) {
       await connect();
       return;
     }
-    if (!CONTRACT_ADDRESS || !claimId) return;
+    if (!CONTRACT_ADDRESS || !claimId || !claim) return;
+
+    if (!isRemixer) {
+      setActionError(
+        'Only the remixer wallet may settle this claim. Switch MetaMask to ' +
+        claim.remixer + ' and try again.'
+      );
+      return;
+    }
 
     const valNum = parseFloat(distributeAmount);
-    if (isNaN(valNum) || valNum <= 0) {
-      setActionError('Enter a valid GEN amount to distribute');
+    if (isNaN(valNum) || valNum < settlementMinGen) {
+      setActionError(
+        `Enter at least ${settlementMinGen} GEN — the contract rejects settlements ` +
+        `below SETTLEMENT_MIN to protect the artist against dust-payment attacks.`
+      );
       return;
     }
 
@@ -132,7 +171,6 @@ export const ClaimDetail: React.FC = () => {
 
     try {
       const client = makeClient(address);
-      // Convert GEN to wei (18 decimals)
       const weiVal = BigInt(Math.floor(valNum * 1e18));
 
       const txHash = await client.writeContract({
@@ -142,11 +180,8 @@ export const ClaimDetail: React.FC = () => {
         value: weiVal,
       });
 
-      if (typeof txHash === 'string') {
-        setPendingTxHash(txHash);
-      }
+      if (typeof txHash === 'string') setPendingTxHash(txHash);
 
-      // Poll state for distribution flag
       const startTime = Date.now();
       while (Date.now() - startTime < 30000) {
         await new Promise((r) => setTimeout(r, 2000));
@@ -171,6 +206,66 @@ export const ClaimDetail: React.FC = () => {
       setActionError(err?.message || 'Distribution failed');
     } finally {
       setIsDistributing(false);
+    }
+  };
+
+  // Handle Appeal action (v1.1.0: remixer-only, stake = 2× deposit)
+  const handleAppeal = async () => {
+    if (!isConnected || !address) {
+      await connect();
+      return;
+    }
+    if (!CONTRACT_ADDRESS || !claimId || !claim) return;
+
+    if (!isRemixer) {
+      setActionError('Only the remixer may appeal. Switch MetaMask to ' + claim.remixer + '.');
+      return;
+    }
+    if ((claim.appeals ?? 0) >= maxAppeals) {
+      setActionError(`Max appeals (${maxAppeals}) already used on this claim.`);
+      return;
+    }
+
+    setIsAppealing(true);
+    setActionError(null);
+    setSuccessMsg(null);
+    setPendingTxHash(undefined);
+
+    try {
+      const stakeWei = BigInt(claim.deposit) * BigInt(appealMultiplier);
+      const client = makeClient(address);
+      const txHash = await client.writeContract({
+        address: CONTRACT_ADDRESS as `0x${string}`,
+        functionName: 'appeal',
+        args: [claimId],
+        value: stakeWei,
+      });
+      if (typeof txHash === 'string') setPendingTxHash(txHash);
+
+      const startTime = Date.now();
+      while (Date.now() - startTime < 90000) {
+        await new Promise((r) => setTimeout(r, 3000));
+        try {
+          const updated = await client.readContract({
+            address: CONTRACT_ADDRESS as `0x${string}`,
+            functionName: 'get_claim',
+            args: [claimId],
+          }) as unknown as Claim;
+          if (updated && updated.status !== 'PENDING' && updated.appeals > (claim.appeals ?? 0)) {
+            setClaim(updated);
+            setSuccessMsg(`Appeal finalized — new verdict: ${updated.status}`);
+            break;
+          }
+        } catch (e) {
+          console.warn('Polling appeal status...', e);
+        }
+      }
+      await fetchClaimAndWork();
+    } catch (err: any) {
+      console.error(err);
+      setActionError(err?.message || 'Appeal failed');
+    } finally {
+      setIsAppealing(false);
     }
   };
 
@@ -221,7 +316,7 @@ export const ClaimDetail: React.FC = () => {
         </button>
       </div>
 
-      {(isAdjudicating || isDistributing) && <PendingBanner txHash={pendingTxHash} />}
+      {(isAdjudicating || isDistributing || isAppealing) && <PendingBanner txHash={pendingTxHash} />}
 
       {successMsg && (
         <div className="bg-emerald-950/80 border border-emerald-500/50 rounded-2xl p-4 text-emerald-200 flex items-center gap-3">
@@ -237,10 +332,8 @@ export const ClaimDetail: React.FC = () => {
         </div>
       )}
 
-      {/* Primary Verdict Card */}
       <VerdictCard claim={claim} txHash={pendingTxHash} />
 
-      {/* Claim & Work Details */}
       <div className="grid md:grid-cols-2 gap-6">
         {/* Original Work Context */}
         <div className="bg-[#121422] border border-slate-800 rounded-2xl p-6 space-y-4">
@@ -262,26 +355,19 @@ export const ClaimDetail: React.FC = () => {
                 <div className="text-[10px] uppercase font-semibold text-slate-500">Title</div>
                 <div className="font-bold text-white text-base">{work.title}</div>
               </div>
-
               <div>
                 <div className="text-[10px] uppercase font-semibold text-slate-500">Artist Address</div>
                 <div className="font-mono text-xs text-slate-300 truncate">{work.artist}</div>
               </div>
-
               <div>
                 <div className="text-[10px] uppercase font-semibold text-slate-500">Source Page</div>
-                <a
-                  href={work.source_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs text-cyan-400 hover:underline flex items-center gap-1 font-mono truncate"
-                >
+                <a href={work.source_url} target="_blank" rel="noreferrer"
+                   className="text-xs text-cyan-400 hover:underline flex items-center gap-1 font-mono truncate">
                   <Globe className="w-3.5 h-3.5" />
                   {work.source_url}
                   <ExternalLink className="w-3 h-3" />
                 </a>
               </div>
-
               <div>
                 <div className="text-[10px] uppercase font-semibold text-purple-400">License Terms (Natural Language)</div>
                 <div className="bg-[#0b0c13] border border-slate-800 p-3 rounded-xl text-xs text-slate-300 font-sans leading-relaxed mt-1">
@@ -309,21 +395,15 @@ export const ClaimDetail: React.FC = () => {
               <div className="text-[10px] uppercase font-semibold text-slate-500">Remixer Address</div>
               <div className="font-mono text-xs text-slate-300 truncate">{claim.remixer}</div>
             </div>
-
             <div>
               <div className="text-[10px] uppercase font-semibold text-slate-500">Remix Track URL</div>
-              <a
-                href={claim.remix_url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs text-cyan-400 hover:underline flex items-center gap-1 font-mono truncate"
-              >
+              <a href={claim.remix_url} target="_blank" rel="noreferrer"
+                 className="text-xs text-cyan-400 hover:underline flex items-center gap-1 font-mono truncate">
                 <Globe className="w-3.5 h-3.5" />
                 {claim.remix_url}
                 <ExternalLink className="w-3 h-3" />
               </a>
             </div>
-
             <div>
               <div className="text-[10px] uppercase font-semibold text-slate-500">Remixer Declaration</div>
               <div className="bg-[#0b0c13] border border-slate-800 p-3 rounded-xl text-xs text-slate-300 font-sans leading-relaxed mt-1">
@@ -336,6 +416,18 @@ export const ClaimDetail: React.FC = () => {
                 <div className="text-[10px] text-slate-500 uppercase">Escrow Deposit</div>
                 <div className="font-bold text-slate-200">
                   {(Number(claim.deposit) / 1e18).toFixed(4)} GEN
+                </div>
+              </div>
+              <div className="bg-[#0b0c13] p-2.5 rounded-xl border border-slate-800">
+                <div className="text-[10px] text-slate-500 uppercase">AI Confidence</div>
+                <div className="font-bold text-cyan-300">
+                  {(claim as any).ai_confidence ?? 0}%
+                </div>
+              </div>
+              <div className="bg-[#0b0c13] p-2.5 rounded-xl border border-slate-800">
+                <div className="text-[10px] text-slate-500 uppercase">Appeals Used</div>
+                <div className="font-bold text-amber-300">
+                  {(claim as any).appeals ?? 0} / {maxAppeals}
                 </div>
               </div>
               <div className="bg-[#0b0c13] p-2.5 rounded-xl border border-slate-800">
@@ -384,7 +476,24 @@ export const ClaimDetail: React.FC = () => {
         {(claim.status === 'APPROVED' || claim.status === 'MODIFIED') && !claim.distributed && (
           <div className="space-y-4 bg-[#0b0c13] border border-slate-800 rounded-xl p-4">
             <div className="text-xs text-slate-300 leading-relaxed">
-              This claim has been <strong className="text-emerald-400">{claim.status}</strong> with a final royalty split of <strong className="text-cyan-300">{(claim.final_split_bps / 100).toFixed(2)}%</strong>. Distribute revenue on-chain to send funds to original artist &amp; remixer (including deposit refund).
+              Verdict: <strong className="text-emerald-400">{claim.status}</strong>. Final royalty split: <strong className="text-cyan-300">{(claim.final_split_bps / 100).toFixed(2)}%</strong>. Sending a settlement now pays the artist their cut, refunds your deposit, and closes the claim.
+            </div>
+
+            <div className="bg-amber-950/40 border border-amber-500/40 rounded-xl p-3 text-amber-200 text-xs flex gap-2">
+              <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+              <div>
+                <div className="font-bold mb-1">Contract-enforced rules (v1.1.0):</div>
+                <ul className="list-disc pl-4 space-y-0.5 text-amber-100/90">
+                  <li>Only the remixer wallet <span className="font-mono">{claim.remixer.slice(0, 10)}…</span> may call <code>distribute()</code>.</li>
+                  <li>Minimum settlement: <strong>{settlementMinGen} GEN</strong>. Dust payments revert on-chain.</li>
+                  <li>Second call to <code>distribute()</code> after success reverts (replay-safe).</li>
+                </ul>
+                {!isRemixer && (
+                  <div className="mt-2 text-rose-300">
+                    ⚠ You are connected as a different wallet. Switch MetaMask to the remixer account before continuing.
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex flex-col sm:flex-row items-center gap-3">
@@ -393,10 +502,10 @@ export const ClaimDetail: React.FC = () => {
                 <input
                   type="number"
                   step="0.01"
-                  min="0.001"
+                  min={settlementMinGen}
                   value={distributeAmount}
                   onChange={(e) => setDistributeAmount(e.target.value)}
-                  placeholder="0.1"
+                  placeholder={String(settlementMinGen)}
                   className="w-full bg-[#121422] border border-slate-700/80 rounded-xl pl-9 pr-12 py-2.5 text-slate-100 text-sm font-mono focus:outline-none focus:border-emerald-500"
                 />
                 <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">GEN</span>
@@ -404,8 +513,9 @@ export const ClaimDetail: React.FC = () => {
 
               <button
                 onClick={handleDistribute}
-                disabled={isDistributing}
-                className="w-full sm:w-auto flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-6 rounded-xl text-sm transition-all shadow-lg shadow-emerald-600/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                disabled={isDistributing || !isRemixer}
+                title={!isRemixer ? 'Only the remixer wallet may distribute' : ''}
+                className="w-full sm:w-auto flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-6 rounded-xl text-sm transition-all shadow-lg shadow-emerald-600/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {isDistributing ? (
                   <>
@@ -430,11 +540,45 @@ export const ClaimDetail: React.FC = () => {
           </div>
         )}
 
+        {(claim.status === 'REJECTED' || claim.status === 'MODIFIED') && !claim.distributed && (
+          <div className="bg-indigo-950/40 border border-indigo-500/30 rounded-xl p-4 space-y-3">
+            <div className="flex items-center gap-2 text-indigo-200 text-sm font-bold">
+              <Gavel className="w-4 h-4" />
+              <span>Appeal this verdict</span>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              You (the remixer) may re-stake <strong>{appealMultiplier}×</strong> the original deposit
+              ({(Number(claim.deposit) * appealMultiplier / 1e18).toFixed(4)} GEN) to force one
+              re-adjudication round. Capped at {maxAppeals} appeals per claim.
+              Appeals used: <strong>{(claim as any).appeals ?? 0} / {maxAppeals}</strong>.
+            </p>
+            <button
+              onClick={handleAppeal}
+              disabled={isAppealing || !isRemixer || ((claim as any).appeals ?? 0) >= maxAppeals}
+              title={!isRemixer ? 'Only the remixer may appeal' : ''}
+              className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 px-6 rounded-xl text-sm transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {isAppealing ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>AI Jury Re-adjudicating...</span>
+                </>
+              ) : (
+                <>
+                  <Gavel className="w-4 h-4" />
+                  <span>Appeal ({(Number(claim.deposit) * appealMultiplier / 1e18).toFixed(4)} GEN stake)</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
         {claim.status === 'REJECTED' && (
           <div className="bg-rose-950/40 border border-rose-500/30 rounded-xl p-4 text-rose-300 text-xs space-y-1">
             <div className="font-bold uppercase tracking-wider">Claim Rejected by AI Jury</div>
             <p className="text-slate-300">
-              Because this claim was REJECTED, no royalty distribution is allowed and the 0.01 GEN deposit remains in contract escrow.
+              The 0.01 GEN deposit was forfeited into the contract&apos;s <code>forfeited_pool</code>
+              — appeals require an additional {appealMultiplier}× stake.
             </p>
           </div>
         )}

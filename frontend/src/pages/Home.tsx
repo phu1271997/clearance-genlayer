@@ -75,7 +75,7 @@ export const Home: React.FC = () => {
         </div>
 
         {/* Live Counters */}
-        <div className="grid grid-cols-2 sm:grid-cols-2 gap-4 mt-10 pt-8 border-t border-slate-800/80 max-w-lg">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-10 pt-8 border-t border-slate-800/80 max-w-2xl">
           <div className="bg-[#0b0c13]/80 border border-slate-800 rounded-2xl p-4">
             <div className="text-xs uppercase font-semibold text-slate-400 tracking-wider">Registered Works</div>
             <div className="text-3xl font-extrabold text-white mt-1 font-mono">
@@ -86,6 +86,17 @@ export const Home: React.FC = () => {
             <div className="text-xs uppercase font-semibold text-slate-400 tracking-wider">Remix Claims</div>
             <div className="text-3xl font-extrabold text-cyan-400 mt-1 font-mono">
               {loading ? '...' : (counts?.claims ?? 0)}
+            </div>
+          </div>
+          <div className="bg-[#0b0c13]/80 border border-slate-800 rounded-2xl p-4">
+            <div className="text-xs uppercase font-semibold text-slate-400 tracking-wider">Forfeited Pool</div>
+            <div className="text-3xl font-extrabold text-rose-300 mt-1 font-mono">
+              {loading
+                ? '...'
+                : counts?.forfeited_pool
+                  ? (Number(BigInt(counts.forfeited_pool)) / 1e18).toFixed(3)
+                  : '0.000'}
+              <span className="text-xs text-slate-500 ml-1">GEN</span>
             </div>
           </div>
         </div>
