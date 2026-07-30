@@ -73,20 +73,26 @@ class Contract(gl.Contract):
     # Storage (TreeMap / DynArray auto-initialize — DO NOT reassign in __init__)
     works: TreeMap[str, Work]
     claims: TreeMap[str, Claim]
-    claims_by_work: TreeMap[str, DynArray[str]]     # work_id -> [claim_id, ...]
-    works_by_artist: TreeMap[str, DynArray[str]]    # artist -> [work_id, ...]
     reputation: TreeMap[str, Reputation]            # address -> Reputation
     forfeited_pool: bigint                          # sum of deposits from REJECTED claims
     next_work_id: bigint
     next_claim_id: bigint
     owner: Address
 
+    # NOTE: no `works_by_artist` / `claims_by_work` TreeMap[str, DynArray[str]]
+    # reverse indices. Studio's current build rejects
+    # `gl.storage.inmem_allocate(DynArray[str])` with
+    #   TypeError: _GenericAlias.__init__() missing 'args'
+    # so those indices would revert every write that touched them. Views that
+    # need per-artist / per-work listings scan `range(next_work_id / next_claim_id)`
+    # instead — O(n) but correct on every build.
+
     def __init__(self):
         self.next_work_id = bigint(0)
         self.next_claim_id = bigint(0)
         self.forfeited_pool = bigint(0)
         self.owner = gl.message.sender_address
-        # DO NOT touch works / claims / claims_by_work / works_by_artist / reputation.
+        # DO NOT touch works / claims / reputation here.
 
     # -- WRITE: register a work ------------------------------------------------
 
@@ -115,9 +121,6 @@ class Contract(gl.Contract):
             license_terms=license_terms,
             created_at=bigint(gl.message.block_timestamp) if hasattr(gl.message, "block_timestamp") else bigint(0),
         )
-        if artist not in self.works_by_artist:
-            self.works_by_artist[artist] = gl.storage.inmem_allocate(DynArray[str])
-        self.works_by_artist[artist].append(wid)
         return wid
 
     # -- WRITE (payable): submit a remix claim ---------------------------------
@@ -164,9 +167,6 @@ class Contract(gl.Contract):
             ai_confidence=u8(0),
             appeals=u8(0),
         )
-        if work_id not in self.claims_by_work:
-            self.claims_by_work[work_id] = gl.storage.inmem_allocate(DynArray[str])
-        self.claims_by_work[work_id].append(cid)
         return cid
 
     # -- Internal: run one adjudication round ----------------------------------
@@ -524,19 +524,36 @@ Decision guide:
 
     @gl.public.view
     def list_claims_for_work(self, work_id: str) -> list:
-        if work_id not in self.claims_by_work:
-            return []
         out = []
-        for cid in self.claims_by_work[work_id]:
-            c = self.claims[cid]
-            out.append({
-                "id": c.id,
-                "remixer": c.remixer,
-                "status": c.status,
-                "proposed_split_bps": int(c.proposed_split_bps),
-                "final_split_bps": int(c.final_split_bps),
-                "ai_confidence": int(c.ai_confidence),
-            })
+        count = int(self.next_claim_id)
+        for i in range(count):
+            cid = str(i)
+            if cid in self.claims:
+                c = self.claims[cid]
+                if c.work_id == work_id:
+                    out.append({
+                        "id": c.id,
+                        "remixer": c.remixer,
+                        "status": c.status,
+                        "proposed_split_bps": int(c.proposed_split_bps),
+                        "final_split_bps": int(c.final_split_bps),
+                        "ai_confidence": int(c.ai_confidence),
+                    })
+        return out
+
+    @gl.public.view
+    def list_works_by_artist(self, artist: str) -> list:
+        key = artist.lower()
+        if not key.startswith("0x"):
+            key = "0x" + key
+        out = []
+        count = int(self.next_work_id)
+        for i in range(count):
+            wid = str(i)
+            if wid in self.works:
+                w = self.works[wid]
+                if w.artist == key:
+                    out.append({"id": w.id, "artist": w.artist, "title": w.title})
         return out
 
     @gl.public.view
