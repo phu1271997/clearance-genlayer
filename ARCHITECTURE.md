@@ -44,8 +44,6 @@ MetaMask on the studionet chain (`network.ts::ensureStudionet()`).
 class Contract(gl.Contract):
     works:            TreeMap[str, Work]                # work_id → Work
     claims:           TreeMap[str, Claim]               # claim_id → Claim
-    claims_by_work:   TreeMap[str, DynArray[str]]       # work_id → [claim_id]
-    works_by_artist:  TreeMap[str, DynArray[str]]       # artist  → [work_id]
     reputation:       TreeMap[str, Reputation]          # address → tally
     forfeited_pool:   bigint                            # sum of REJECTED deposits
     next_work_id:     bigint
@@ -60,6 +58,12 @@ Storage rules (see `02-common-errors.md` R5/R14/R18/R19):
 - Monetary values are `bigint`; bounded fields use `u8` (confidence,
   appeal count) and `u16` (basis points).
 - All custom structs are `@allow_storage @dataclass`.
+- **No `TreeMap[str, DynArray[str]]` reverse indices.** Studio's current
+  build rejects `gl.storage.inmem_allocate(DynArray[str])` with
+  `TypeError: _GenericAlias.__init__() missing 'args'`. Views that need
+  per-artist / per-work listings scan `range(next_work_id / next_claim_id)`
+  — O(n) but correct on every build. See `list_claims_for_work` and
+  `list_works_by_artist`.
 
 ---
 

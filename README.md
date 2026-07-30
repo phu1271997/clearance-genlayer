@@ -2,8 +2,8 @@
 
 > **An on-chain AI jury clears music samples in minutes, not months.**
 
-**Current version:** `v1.1.0` — see [`CHANGELOG.md`](CHANGELOG.md) and
-[`SECURITY.md`](SECURITY.md) for the post-audit hardening.
+**Current version:** `v1.1.1` — see [`CHANGELOG.md`](CHANGELOG.md) and
+[`SECURITY.md`](SECURITY.md).
 
 ---
 
@@ -122,7 +122,8 @@ a custom semantic `validator_fn` inside `gl.vm.run_nondet`:
 ## Deployed Contract
 
 - **Network:** GenLayer Studio Network (`studionet`, Chain ID `61999` / `0xF1EF`)
-- **Contract (v1.1.0 — current):** [`0xD1cbE5E47ebaE8a2c879913801ee275cfDbd0356`](https://genlayer-explorer.vercel.app/address/0xD1cbE5E47ebaE8a2c879913801ee275cfDbd0356)
+- **Contract (v1.1.1 — current):** *pending redeploy of the hotfixed `contracts/clearance.py`*
+- **Contract (v1.1.0 — deprecated):** `0xD1cbE5E47ebaE8a2c879913801ee275cfDbd0356` (writes revert — see CHANGELOG 1.1.1)
 - **Contract (v1.0.0 — deprecated):** `0x6D7F886071935061B3C1C69DaA0ddb1d143Ced8E`
 - **Block Explorer:** https://genlayer-explorer.vercel.app
 

@@ -3,9 +3,44 @@
 All notable changes to this project follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] — 2026-07-30 (hotfix)
+
+### Fixed (critical — every write reverted)
+
+- `register_work()` and `submit_claim()` reverted on every call with
+  `TypeError: _GenericAlias.__init__() missing 1 required positional
+  argument: 'args'` inside `gl.storage.inmem_allocate(DynArray[str])`.
+  The current studionet build cannot allocate a `DynArray[T]` nested in
+  a `TreeMap`. Root cause dated back to v1.0.0 but was masked because
+  no end-to-end write was tested against studionet before v1.1.0.
+  **Fix:** removed the two reverse indices
+  (`works_by_artist: TreeMap[str, DynArray[str]]` and
+  `claims_by_work: TreeMap[str, DynArray[str]]`) and replaced them with
+  `range(next_work_id / next_claim_id)` scans inside
+  `list_claims_for_work()` and a new `list_works_by_artist(address)`
+  view. O(n) but works on every Studio build.
+
+### Added
+
+- Frontend `awaitTxFinalized()` helper (`frontend/src/lib/genlayer.ts`) —
+  awaits `waitForTransactionReceipt({ status: 'FINALIZED' })` and, when
+  `execution_result !== 'SUCCESS'`, throws with the last line of the
+  leader-receipt `genvm_result.stderr`. All write flows in `RegisterWork`,
+  `SubmitClaim`, and `ClaimDetail` now surface real revert reasons in
+  the UI instead of polling an empty state until timeout.
+
+### Requires redeploy
+
+Contract storage layout changed. `0xD1cbE5E47ebaE8a2c879913801ee275cfDbd0356`
+(v1.1.0) is superseded — deploy `contracts/clearance.py` again and
+update `VITE_CONTRACT_ADDRESS`.
+
+---
+
 ## [1.1.0] — 2026-07-30
 
 **Deployed on studionet:** [`0xD1cbE5E47ebaE8a2c879913801ee275cfDbd0356`](https://genlayer-explorer.vercel.app/address/0xD1cbE5E47ebaE8a2c879913801ee275cfDbd0356)
+*Deprecated — every write reverts. Replaced by v1.1.1.*
 
 **Milestone submission:** *Security Hardening Bundle v1 + AI Enhancement +
 Appeal Flow + Owner Sweep.*
