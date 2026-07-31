@@ -194,9 +194,13 @@ wrapping list.
 
 Portal: https://portal.genlayer.foundation/#/builders/contributions
 
-Contribution type: GenLayer App / Intelligent Contract (v1.1.0
-milestone: *Security Hardening Bundle + AI Enhancement + Appeal Flow +
-Owner Sweep*, see [`CHANGELOG.md`](CHANGELOG.md)).
+Contribution type: GenLayer App / Intelligent Contract. v1.1.1 ships as
+one bundled milestone submission covering Security Hardening,
+AI Enhancement, Appeal Flow, Owner Sweep, Reputation, Documentation
+Overhaul v2, UX Polish v1, and Demo-Seed tooling. See
+[`CHANGELOG.md`](CHANGELOG.md), [`SECURITY.md`](SECURITY.md),
+[`ECONOMICS.md`](ECONOMICS.md), [`CONTRIBUTING.md`](CONTRIBUTING.md),
+and [`docs/adr/`](docs/adr/).
 
 ---
 

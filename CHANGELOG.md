@@ -3,9 +3,49 @@
 All notable changes to this project follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.1] — 2026-07-30 (hotfix)
+## [1.1.1] — 2026-07-30 (hotfix + polish)
 
 **Deployed on studionet:** [`0x5832270783938d0559BdeD7b9D8AD807b7C2D0E3`](https://genlayer-explorer.vercel.app/address/0x5832270783938d0559BdeD7b9D8AD807b7C2D0E3)
+
+### Added — Documentation Overhaul v2
+
+- New [`ECONOMICS.md`](ECONOMICS.md) — actor flows, constants table,
+  four money-flow scenarios, solvency invariant.
+- New [`CONTRIBUTING.md`](CONTRIBUTING.md) — dev loop, coding
+  conventions per subsystem, commit + PR expectations.
+- New [`docs/adr/ADR-002-studionet-vs-testnet.md`](docs/adr/ADR-002-studionet-vs-testnet.md).
+- New [`docs/samples/works.json`](docs/samples/works.json) — 5 preset
+  natural-language licenses. Mirrored in
+  `frontend/src/data/sampleWorks.ts` for the in-app quick-start.
+
+### Added — Reputation page
+
+- New route `/reputation` and `/reputation/:address` that reads
+  `get_reputation(address)` and shows a tier badge derived on the
+  client (Newcomer / Active / Reliable / Trusted / Contested).
+- Navbar has a Reputation tab. "My address" shortcut on the page pulls
+  from the connected wallet.
+
+### Added — UX polish v1
+
+- Top-level React `ErrorBoundary` — no more white-screen crashes; shows
+  the exception message with a Reload button.
+- Reusable shimmer skeletons (`components/Skeleton.tsx`) with a shared
+  keyframe. Replace the "..." + spinner on Home counters and Works
+  grid so the layout no longer jumps when data lands.
+- Register form gets a "Load preset" chip row backed by
+  `SAMPLE_WORKS` — five real licenses at one click.
+- Favicon redrawn to match the brand gradient. Added `og:` / `twitter:`
+  meta tags for a decent social-preview card.
+- Footer now links to the GitHub repo alongside the Portal + contract
+  explorer link.
+
+### Added — Demo seed script
+
+- New [`scripts/seed.mjs`](scripts/seed.mjs) — genlayer-js Node script
+  that reads `docs/samples/works.json` and registers every preset
+  against a `CLEARANCE_ADDR` for a fresh demo. Uses the same
+  await-receipt + surface-stderr pattern as the frontend.
 
 ### Fixed (critical — every write reverted)
 
