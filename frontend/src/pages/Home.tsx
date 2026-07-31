@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { makeClient, CONTRACT_ADDRESS } from '../lib/genlayer';
 import { Counts } from '../lib/types';
 import { Music, ShieldCheck, Scale, Cpu, Globe, ArrowRight, Disc, PlusCircle, CheckCircle2 } from 'lucide-react';
+import { CounterSkeleton } from '../components/Skeleton';
 
 export const Home: React.FC = () => {
   const [counts, setCounts] = useState<Counts | null>(null);
@@ -76,29 +77,33 @@ export const Home: React.FC = () => {
 
         {/* Live Counters */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-10 pt-8 border-t border-slate-800/80 max-w-2xl">
-          <div className="bg-[#0b0c13]/80 border border-slate-800 rounded-2xl p-4">
-            <div className="text-xs uppercase font-semibold text-slate-400 tracking-wider">Registered Works</div>
-            <div className="text-3xl font-extrabold text-white mt-1 font-mono">
-              {loading ? '...' : (counts?.works ?? 0)}
-            </div>
-          </div>
-          <div className="bg-[#0b0c13]/80 border border-slate-800 rounded-2xl p-4">
-            <div className="text-xs uppercase font-semibold text-slate-400 tracking-wider">Remix Claims</div>
-            <div className="text-3xl font-extrabold text-cyan-400 mt-1 font-mono">
-              {loading ? '...' : (counts?.claims ?? 0)}
-            </div>
-          </div>
-          <div className="bg-[#0b0c13]/80 border border-slate-800 rounded-2xl p-4">
-            <div className="text-xs uppercase font-semibold text-slate-400 tracking-wider">Forfeited Pool</div>
-            <div className="text-3xl font-extrabold text-rose-300 mt-1 font-mono">
-              {loading
-                ? '...'
-                : counts?.forfeited_pool
-                  ? (Number(BigInt(counts.forfeited_pool)) / 1e18).toFixed(3)
-                  : '0.000'}
-              <span className="text-xs text-slate-500 ml-1">GEN</span>
-            </div>
-          </div>
+          {loading ? (
+            <><CounterSkeleton /><CounterSkeleton /><CounterSkeleton /></>
+          ) : (
+            <>
+              <div className="bg-[#0b0c13]/80 border border-slate-800 rounded-2xl p-4">
+                <div className="text-xs uppercase font-semibold text-slate-400 tracking-wider">Registered Works</div>
+                <div className="text-3xl font-extrabold text-white mt-1 font-mono">
+                  {counts?.works ?? 0}
+                </div>
+              </div>
+              <div className="bg-[#0b0c13]/80 border border-slate-800 rounded-2xl p-4">
+                <div className="text-xs uppercase font-semibold text-slate-400 tracking-wider">Remix Claims</div>
+                <div className="text-3xl font-extrabold text-cyan-400 mt-1 font-mono">
+                  {counts?.claims ?? 0}
+                </div>
+              </div>
+              <div className="bg-[#0b0c13]/80 border border-slate-800 rounded-2xl p-4">
+                <div className="text-xs uppercase font-semibold text-slate-400 tracking-wider">Forfeited Pool</div>
+                <div className="text-3xl font-extrabold text-rose-300 mt-1 font-mono">
+                  {counts?.forfeited_pool
+                    ? (Number(BigInt(counts.forfeited_pool)) / 1e18).toFixed(3)
+                    : '0.000'}
+                  <span className="text-xs text-slate-500 ml-1">GEN</span>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </section>
 

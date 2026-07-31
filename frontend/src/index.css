@@ -23,3 +23,8 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #313754;
 }
+
+@keyframes clearance-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

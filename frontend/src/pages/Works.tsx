@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { makeClient, CONTRACT_ADDRESS } from '../lib/genlayer';
 import { Disc, Search, PlusCircle, RefreshCw, FileText, ArrowRight, ShieldAlert } from 'lucide-react';
+import { WorkCardSkeleton } from '../components/Skeleton';
 
 interface WorkSummary {
   id: string;
@@ -96,9 +97,8 @@ export const Works: React.FC = () => {
           </p>
         </div>
       ) : loading ? (
-        <div className="py-16 text-center space-y-3">
-          <RefreshCw className="w-8 h-8 animate-spin text-purple-500 mx-auto" />
-          <p className="text-slate-400 text-xs">Loading registered catalog from studionet...</p>
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[0, 1, 2, 3, 4, 5].map((i) => <WorkCardSkeleton key={i} />)}
         </div>
       ) : filtered.length === 0 ? (
         <div className="bg-[#121422] border border-slate-800/80 rounded-2xl p-12 text-center space-y-4">

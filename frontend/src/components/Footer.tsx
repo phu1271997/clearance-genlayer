@@ -1,5 +1,5 @@
 import React from 'react';
-import { ExternalLink, ShieldAlert, Cpu } from 'lucide-react';
+import { ExternalLink, ShieldAlert, Cpu, Github } from 'lucide-react';
 import { CONTRACT_ADDRESS, EXPLORER_URL } from '../lib/genlayer';
 
 export const Footer: React.FC = () => {
@@ -31,6 +31,16 @@ export const Footer: React.FC = () => {
             </span>
           )}
 
+          <a
+            href="https://github.com/phu1271997/clearance-genlayer"
+            target="_blank"
+            rel="noreferrer"
+            className="hover:text-slate-200 flex items-center gap-1 transition-colors"
+          >
+            <Github className="w-3.5 h-3.5" />
+            <span>Source</span>
+            <ExternalLink className="w-3 h-3" />
+          </a>
           <a
             href="https://portal.genlayer.foundation/#/builders/contributions"
             target="_blank"
