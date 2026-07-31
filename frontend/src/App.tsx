@@ -10,6 +10,7 @@ import { WorkDetail } from './pages/WorkDetail';
 import { SubmitClaim } from './pages/SubmitClaim';
 import { ClaimDetail } from './pages/ClaimDetail';
 import { MyWorks } from './pages/MyWorks';
+import { Reputation } from './pages/Reputation';
 
 export const App: React.FC = () => {
   return (
@@ -26,6 +27,8 @@ export const App: React.FC = () => {
               <Route path="/claim/new/:workId" element={<SubmitClaim />} />
               <Route path="/claim/:claimId" element={<ClaimDetail />} />
               <Route path="/my-works" element={<MyWorks />} />
+              <Route path="/reputation" element={<Reputation />} />
+              <Route path="/reputation/:address" element={<Reputation />} />
             </Routes>
           </main>
           <Footer />

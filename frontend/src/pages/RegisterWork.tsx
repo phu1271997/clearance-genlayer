@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { makeClient, CONTRACT_ADDRESS, awaitTxFinalized } from '../lib/genlayer';
 import { useWallet } from '../context/WalletContext';
 import { PendingBanner } from '../components/PendingBanner';
-import { PlusCircle, FileText, Globe, Music, AlertCircle, ArrowLeft, CheckCircle } from 'lucide-react';
+import { PlusCircle, FileText, Globe, Music, AlertCircle, ArrowLeft, CheckCircle, Wand2 } from 'lucide-react';
+import { SAMPLE_WORKS } from '../data/sampleWorks';
 
 export const RegisterWork: React.FC = () => {
   const navigate = useNavigate();
@@ -137,6 +138,32 @@ export const RegisterWork: React.FC = () => {
             <span>{error}</span>
           </div>
         )}
+
+        <div className="bg-[#0b0c13] border border-purple-500/30 rounded-2xl p-4 space-y-3">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-300">
+            <Wand2 className="w-4 h-4" />
+            <span>Quick-start: load a sample license</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {SAMPLE_WORKS.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => {
+                  setTitle(s.title);
+                  setSourceUrl(s.source_url);
+                  setLicenseTerms(s.license_terms);
+                }}
+                className="text-xs px-3 py-1.5 rounded-full bg-purple-950/50 border border-purple-500/30 text-purple-200 hover:bg-purple-900/60 hover:border-purple-400/60 transition-colors font-semibold"
+              >
+                {s.title}
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-slate-500">
+            Presets loaded from <code>docs/samples/works.json</code> — each demonstrates a natural-language license that Solidity cannot interpret.
+          </p>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">

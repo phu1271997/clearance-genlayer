@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ConnectWallet } from './ConnectWallet';
-import { Music, PlusCircle, Disc, User, Sparkles } from 'lucide-react';
+import { Music, PlusCircle, Disc, User, Sparkles, Award } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
   const location = useLocation();
@@ -76,6 +76,17 @@ export const Navbar: React.FC = () => {
           >
             <User className="w-3.5 h-3.5" />
             <span>My Portfolio</span>
+          </Link>
+          <Link
+            to="/reputation"
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+              location.pathname.startsWith('/reputation')
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            <Award className="w-3.5 h-3.5" />
+            <span>Reputation</span>
           </Link>
         </nav>
 
