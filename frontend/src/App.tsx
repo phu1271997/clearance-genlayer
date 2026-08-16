@@ -11,6 +11,7 @@ import { SubmitClaim } from './pages/SubmitClaim';
 import { ClaimDetail } from './pages/ClaimDetail';
 import { MyWorks } from './pages/MyWorks';
 import { Reputation } from './pages/Reputation';
+import { Verdicts } from './pages/Verdicts';
 
 export const App: React.FC = () => {
   return (
@@ -22,6 +23,7 @@ export const App: React.FC = () => {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/register" element={<RegisterWork />} />
+              <Route path="/verdicts" element={<Verdicts />} />
               <Route path="/works" element={<Works />} />
               <Route path="/works/:workId" element={<WorkDetail />} />
               <Route path="/claim/new/:workId" element={<SubmitClaim />} />

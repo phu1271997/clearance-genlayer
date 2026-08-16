@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { makeClient, CONTRACT_ADDRESS } from '../lib/genlayer';
 import { Counts } from '../lib/types';
-import { Music, ShieldCheck, Scale, Cpu, Globe, ArrowRight, Disc, PlusCircle, CheckCircle2 } from 'lucide-react';
+import { Music, ShieldCheck, Scale, Cpu, Globe, ArrowRight, Disc, PlusCircle, Gavel } from 'lucide-react';
 import { CounterSkeleton } from '../components/Skeleton';
 
 export const Home: React.FC = () => {
@@ -72,7 +72,26 @@ export const Home: React.FC = () => {
               <span>Browse Catalog & Submit Claim</span>
               <ArrowRight className="w-4 h-4 ml-1" />
             </Link>
+            <Link
+              to="/verdicts"
+              className="flex items-center gap-2 bg-[#1a1c2b] hover:bg-[#222538] text-slate-200 font-semibold px-6 py-3.5 rounded-2xl text-sm border border-slate-700/70 transition-all active:scale-[0.98]"
+            >
+              <Gavel className="w-4 h-4 text-purple-400" />
+              <span>See AI Verdicts</span>
+            </Link>
           </div>
+
+          <p className="text-xs text-slate-400">
+            No wallet needed to read verdicts. The{' '}
+            <Link to="/verdicts" className="text-cyan-400 hover:underline">
+              verdict feed
+            </Link>{' '}
+            and the{' '}
+            <a href="/evidence/" className="text-cyan-400 hover:underline">
+              evidence pages
+            </a>{' '}
+            the jury reads are both public.
+          </p>
         </div>
 
         {/* Live Counters */}
@@ -94,11 +113,13 @@ export const Home: React.FC = () => {
                 </div>
               </div>
               <div className="bg-[#0b0c13]/80 border border-slate-800 rounded-2xl p-4">
-                <div className="text-xs uppercase font-semibold text-slate-400 tracking-wider">Forfeited Pool</div>
+                <div className="text-xs uppercase font-semibold text-slate-400 tracking-wider">Forfeited Escrow</div>
                 <div className="text-3xl font-extrabold text-rose-300 mt-1 font-mono">
-                  {counts?.forfeited_pool
-                    ? (Number(BigInt(counts.forfeited_pool)) / 1e18).toFixed(3)
-                    : '0.000'}
+                  {(
+                    (Number(BigInt(counts?.forfeited_pool ?? '0')) +
+                      Number(BigInt(counts?.forfeited_final ?? '0'))) /
+                    1e18
+                  ).toFixed(3)}
                   <span className="text-xs text-slate-500 ml-1">GEN</span>
                 </div>
               </div>

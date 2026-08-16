@@ -1,4 +1,5 @@
 import React from 'react';
+import { EXPLORER_URL } from '../lib/genlayer';
 import { Cpu, Loader2 } from 'lucide-react';
 
 interface PendingBannerProps {
@@ -23,14 +24,18 @@ export const PendingBanner: React.FC<PendingBannerProps> = ({ message, txHash })
           <p className="text-xs text-purple-200/90 leading-relaxed font-medium">
             {message || (
               <>
-                <strong>Waiting for AI consensus on studionet…</strong> non-deterministic transactions are slower than regular ones because a jury of validators must agree.
+                <strong>Waiting for AI consensus on studionet…</strong> the validators are
+                fetching both track pages and running the licence prompt before they vote.
+                Non-deterministic transactions are much slower than plain ones —{' '}
+                <strong>expect roughly 30–90 seconds</strong>. Keep this tab open; the page
+                refreshes itself the moment the verdict finalizes.
               </>
             )}
           </p>
           {txHash && (
             <div className="pt-1">
               <a
-                href={`https://genlayer-explorer.vercel.app/tx/${txHash}`}
+                href={`${EXPLORER_URL}/tx/${txHash}`}
                 target="_blank"
                 rel="noreferrer"
                 className="text-xs text-cyan-400 hover:text-cyan-300 underline font-mono inline-flex items-center gap-1"

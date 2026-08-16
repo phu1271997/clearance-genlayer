@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ConnectWallet } from './ConnectWallet';
-import { Music, PlusCircle, Disc, User, Sparkles, Award } from 'lucide-react';
+import { Music, PlusCircle, Disc, User, Sparkles, Award, Gavel } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
   const location = useLocation();
@@ -54,6 +54,17 @@ export const Navbar: React.FC = () => {
           >
             <Disc className="w-3.5 h-3.5" />
             <span>All Works</span>
+          </Link>
+          <Link
+            to="/verdicts"
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+              isActive('/verdicts')
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            <Gavel className="w-3.5 h-3.5" />
+            <span>Verdicts</span>
           </Link>
           <Link
             to="/register"
