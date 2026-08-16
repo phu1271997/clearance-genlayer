@@ -27,13 +27,25 @@ class Claim:
     remix_url: str
     declaration: str
     proposed_split_bps: u16    # 0-10000 (100.00%)
-    status: str                # "PENDING" | "APPROVED" | "MODIFIED" | "REJECTED" | "ERROR" | "APPEALED"
+    status: str                # "PENDING" | "APPROVED" | "MODIFIED" | "REJECTED"
     final_split_bps: u16
     reason: str
-    deposit: bigint            # remixer's escrow, refunded on APPROVED/MODIFIED distribute
+    deposit: bigint            # live escrow, refunded on APPROVED/MODIFIED distribute
     distributed: bool
     ai_confidence: u8          # 0-100
     appeals: u8                # number of appeals used
+    # v1.2.0 —------------------------------------------------------------
+    # `deposit` is zeroed on REJECTED (the money moves to a forfeit bucket),
+    # so it cannot be the reference for the appeal stake: after one
+    # rejection `deposit * multiplier` is 0 and appeals become free.
+    # `base_deposit` records the original submit_claim escrow and is never
+    # mutated, so the appeal price stays constant across rounds.
+    base_deposit: bigint
+    # Amount of THIS claim's money currently parked in `forfeited_pool`
+    # (i.e. still appeal-eligible). Restored to `deposit` if a later appeal
+    # overturns the rejection. Zero once appeals are exhausted — at that
+    # point the money moves to `forfeited_final` and is gone for good.
+    forfeited: bigint
 
 @allow_storage
 @dataclass
@@ -74,7 +86,16 @@ class Contract(gl.Contract):
     works: TreeMap[str, Work]
     claims: TreeMap[str, Claim]
     reputation: TreeMap[str, Reputation]            # address -> Reputation
-    forfeited_pool: bigint                          # sum of deposits from REJECTED claims
+    # Two forfeit buckets, deliberately separate (v1.2.0):
+    #   forfeited_pool  — rejected deposits that are STILL appeal-eligible.
+    #                     Locked: the owner may not sweep them, because an
+    #                     appeal can legitimately win the money back.
+    #   forfeited_final — rejected deposits from claims that exhausted their
+    #                     appeals. Only this bucket is sweepable.
+    # Splitting them removes the underflow/unfairness hole a single pool has
+    # (owner sweeps, then an appeal succeeds and there is nothing to refund).
+    forfeited_pool: bigint
+    forfeited_final: bigint
     next_work_id: bigint
     next_claim_id: bigint
     owner: Address
@@ -91,6 +112,7 @@ class Contract(gl.Contract):
         self.next_work_id = bigint(0)
         self.next_claim_id = bigint(0)
         self.forfeited_pool = bigint(0)
+        self.forfeited_final = bigint(0)
         self.owner = gl.message.sender_address
         # DO NOT touch works / claims / reputation here.
 
@@ -99,15 +121,15 @@ class Contract(gl.Contract):
     @gl.public.write
     def register_work(self, title: str, source_url: str, license_terms: str) -> str:
         if not title.strip():
-            raise UserError("title is empty")
+            raise gl.vm.UserError("title is empty")
         if not source_url.startswith("http"):
-            raise UserError("source_url must be an http(s) URL")
+            raise gl.vm.UserError("source_url must be an http(s) URL")
         if len(license_terms.strip()) < 10:
-            raise UserError("license_terms too short — describe the actual license")
+            raise gl.vm.UserError("license_terms too short — describe the actual license")
         if len(license_terms) > 4000:
-            raise UserError("license_terms too long (max 4000 chars)")
+            raise gl.vm.UserError("license_terms too long (max 4000 chars)")
         if CANARY_TOKEN in license_terms:
-            raise UserError("license_terms contains a reserved token")
+            raise gl.vm.UserError("license_terms contains a reserved token")
 
         artist = _addr_str(gl.message.sender_address)
         wid = str(self.next_work_id)
@@ -134,19 +156,19 @@ class Contract(gl.Contract):
         proposed_split_bps: int,
     ) -> str:
         if work_id not in self.works:
-            raise UserError(f"work_id {work_id} not found")
+            raise gl.vm.UserError(f"work_id {work_id} not found")
         if not remix_url.startswith("http"):
-            raise UserError("remix_url must be an http(s) URL")
+            raise gl.vm.UserError("remix_url must be an http(s) URL")
         if len(declaration.strip()) < 10:
-            raise UserError("declaration too short")
+            raise gl.vm.UserError("declaration too short")
         if len(declaration) > 4000:
-            raise UserError("declaration too long (max 4000 chars)")
+            raise gl.vm.UserError("declaration too long (max 4000 chars)")
         if proposed_split_bps < 0 or proposed_split_bps > 10000:
-            raise UserError("proposed_split_bps out of range [0, 10000]")
+            raise gl.vm.UserError("proposed_split_bps out of range [0, 10000]")
         if CANARY_TOKEN in declaration:
-            raise UserError("declaration contains a reserved token")
+            raise gl.vm.UserError("declaration contains a reserved token")
         if gl.message.value < CLAIM_DEPOSIT_MIN:
-            raise UserError("insufficient deposit (min 0.01 GEN)")
+            raise gl.vm.UserError("insufficient deposit (min 0.01 GEN)")
 
         remixer = _addr_str(gl.message.sender_address)
         cid = str(self.next_claim_id)
@@ -166,6 +188,8 @@ class Contract(gl.Contract):
             distributed=False,
             ai_confidence=u8(0),
             appeals=u8(0),
+            base_deposit=bigint(gl.message.value),
+            forfeited=bigint(0),
         )
         return cid
 
@@ -295,12 +319,12 @@ Decision guide:
     @gl.public.write
     def adjudicate(self, claim_id: str) -> None:
         if claim_id not in self.claims:
-            raise UserError(f"claim {claim_id} not found")
+            raise gl.vm.UserError(f"claim {claim_id} not found")
         c = self.claims[claim_id]
         if c.status != "PENDING":
-            raise UserError(f"claim {claim_id} already adjudicated: {c.status}")
+            raise gl.vm.UserError(f"claim {claim_id} already adjudicated: {c.status}")
         if c.work_id not in self.works:
-            raise UserError(f"work {c.work_id} vanished")
+            raise gl.vm.UserError(f"work {c.work_id} vanished")
         w = self.works[c.work_id]
 
         result = self._run_adjudication(c, w)
@@ -311,21 +335,25 @@ Decision guide:
     @gl.public.write.payable
     def appeal(self, claim_id: str) -> None:
         if claim_id not in self.claims:
-            raise UserError(f"claim {claim_id} not found")
+            raise gl.vm.UserError(f"claim {claim_id} not found")
         c = self.claims[claim_id]
         if c.status not in ("REJECTED", "MODIFIED"):
-            raise UserError(f"cannot appeal claim in status {c.status}")
+            raise gl.vm.UserError(f"cannot appeal claim in status {c.status}")
         if int(c.appeals) >= MAX_APPEALS:
-            raise UserError("max appeals reached")
+            raise gl.vm.UserError("max appeals reached")
         caller = _addr_str(gl.message.sender_address)
         if caller != c.remixer:
-            raise UserError("only the remixer may appeal")
-        required = c.deposit * bigint(APPEAL_STAKE_MULTIPLIER)
+            raise gl.vm.UserError("only the remixer may appeal")
+        # v1.2.0: price the appeal off base_deposit, NOT deposit. A REJECTED
+        # claim has deposit == 0 (forfeited), so the old `deposit * mult`
+        # rule made every post-rejection appeal free — exactly the case the
+        # stake exists to deter.
+        required = c.base_deposit * bigint(APPEAL_STAKE_MULTIPLIER)
         if bigint(gl.message.value) < required:
-            raise UserError("insufficient appeal stake (must be >= 2x original deposit)")
+            raise gl.vm.UserError("insufficient appeal stake (must be >= 2x the original claim deposit)")
 
         if c.work_id not in self.works:
-            raise UserError("work vanished")
+            raise gl.vm.UserError("work vanished")
         w = self.works[c.work_id]
 
         # Bump appeals counter first so a nested failure doesn't allow infinite retries
@@ -358,6 +386,13 @@ Decision guide:
         c.reason = reason[:1000]
         c.ai_confidence = u8(confidence)
 
+        if verdict in ("APPROVED", "MODIFIED"):
+            # Overturn path: an earlier round may have parked this claim's
+            # money in forfeited_pool. A win pulls it straight back into the
+            # refundable escrow — losing an appeal costs the stake, winning
+            # one restores what the wrong verdict took.
+            self._unforfeit(c)
+
         if verdict == "APPROVED":
             c.status = "APPROVED"
             c.final_split_bps = u16(int(c.proposed_split_bps))
@@ -374,12 +409,31 @@ Decision guide:
         else:  # REJECTED
             c.status = "REJECTED"
             c.final_split_bps = u16(0)
-            # Forfeit deposit — accumulate to owner-withdrawable pool
-            self.forfeited_pool = self.forfeited_pool + c.deposit
+            # Re-forfeit from a clean slate: pull any prior parked amount
+            # back first, then forfeit the whole current escrow in one move.
+            # Without this, a claim rejected twice would double-count.
+            self._unforfeit(c)
+            amount = c.deposit
             c.deposit = bigint(0)
+            if int(c.appeals) >= MAX_APPEALS:
+                # No appeal left — the money is final and becomes sweepable.
+                self.forfeited_final = self.forfeited_final + amount
+                c.forfeited = bigint(0)
+            else:
+                # Still appealable — park it in the locked pool, remember how
+                # much belongs to this claim so an appeal can reclaim it.
+                self.forfeited_pool = self.forfeited_pool + amount
+                c.forfeited = amount
             self._bump_rep(c.remixer, "rejected")
 
         self.claims[claim_id] = c
+
+    def _unforfeit(self, c: Claim) -> None:
+        """Move this claim's parked forfeit back into its refundable escrow."""
+        if c.forfeited > bigint(0):
+            self.forfeited_pool = self.forfeited_pool - c.forfeited
+            c.deposit = c.deposit + c.forfeited
+            c.forfeited = bigint(0)
 
     def _bump_rep(self, address: str, bucket: str) -> None:
         if address not in self.reputation:
@@ -416,32 +470,32 @@ Decision guide:
         4. Replay protection: c.distributed flip is atomic with payout math.
         """
         if claim_id not in self.claims:
-            raise UserError(f"claim {claim_id} not found")
+            raise gl.vm.UserError(f"claim {claim_id} not found")
         c = self.claims[claim_id]
         if c.distributed:
-            raise UserError("already distributed")
+            raise gl.vm.UserError("already distributed")
         if c.status not in ("APPROVED", "MODIFIED"):
-            raise UserError(f"claim is {c.status} — nothing to distribute")
+            raise gl.vm.UserError(f"claim is {c.status} — nothing to distribute")
         if c.work_id not in self.works:
-            raise UserError("work vanished")
+            raise gl.vm.UserError("work vanished")
         w = self.works[c.work_id]
 
         # (1) Payer enforcement — remixer only
         caller = _addr_str(gl.message.sender_address)
         if caller != c.remixer:
-            raise UserError("only the remixer may distribute this claim")
+            raise gl.vm.UserError("only the remixer may distribute this claim")
 
         # (2) Settlement floor — reject dust payments outright
         total = bigint(gl.message.value)
         if total < SETTLEMENT_MIN:
-            raise UserError("settlement amount below minimum (0.10 GEN)")
+            raise gl.vm.UserError("settlement amount below minimum (0.10 GEN)")
 
         split_bps = int(c.final_split_bps)
         to_artist = (total * bigint(split_bps)) // bigint(10000)
 
         # (3) Artist share integrity — refuse settlements where artist rounds to zero
         if split_bps > 0 and to_artist <= bigint(0):
-            raise UserError("settlement too small — artist share rounds to zero")
+            raise gl.vm.UserError("settlement too small — artist share rounds to zero")
 
         to_remixer = total - to_artist
         # Refund deposit — good-faith clearance means deposit returns
@@ -464,14 +518,20 @@ Decision guide:
 
     @gl.public.write
     def sweep_forfeited(self, recipient: str) -> None:
+        """
+        Sweep only `forfeited_final` — deposits from claims that used up all
+        their appeals. `forfeited_pool` stays locked on purpose: sweeping
+        appeal-eligible money would leave the contract unable to refund a
+        remixer whose appeal later succeeds.
+        """
         if _addr_str(gl.message.sender_address) != _addr_str(self.owner):
-            raise UserError("only owner")
-        if self.forfeited_pool <= bigint(0):
-            raise UserError("nothing to sweep")
+            raise gl.vm.UserError("only owner")
+        if self.forfeited_final <= bigint(0):
+            raise gl.vm.UserError("nothing to sweep — forfeits are still appeal-eligible")
         if not recipient.startswith("0x"):
-            raise UserError("recipient must be 0x-prefixed hex address")
-        amount = self.forfeited_pool
-        self.forfeited_pool = bigint(0)
+            raise gl.vm.UserError("recipient must be 0x-prefixed hex address")
+        amount = self.forfeited_final
+        self.forfeited_final = bigint(0)
         gl.get_contract_at(Address(recipient)).emit_transfer(value=u256(int(amount)))
 
     # -- READ views ------------------------------------------------------------
@@ -479,7 +539,7 @@ Decision guide:
     @gl.public.view
     def get_work(self, work_id: str) -> dict:
         if work_id not in self.works:
-            raise UserError("not found")
+            raise gl.vm.UserError("not found")
         w = self.works[work_id]
         return {
             "id": w.id,
@@ -493,7 +553,7 @@ Decision guide:
     @gl.public.view
     def get_claim(self, claim_id: str) -> dict:
         if claim_id not in self.claims:
-            raise UserError("not found")
+            raise gl.vm.UserError("not found")
         c = self.claims[claim_id]
         return {
             "id": c.id,
@@ -506,10 +566,43 @@ Decision guide:
             "status": c.status,
             "reason": c.reason,
             "deposit": str(int(c.deposit)),
+            "base_deposit": str(int(c.base_deposit)),
+            "forfeited": str(int(c.forfeited)),
             "distributed": c.distributed,
             "ai_confidence": int(c.ai_confidence),
             "appeals": int(c.appeals),
         }
+
+    @gl.public.view
+    def list_claims(self) -> list:
+        """
+        Global verdict feed, newest first. Public read — no wallet needed, so
+        a first-time visitor can see real adjudicated evidence immediately.
+        """
+        out = []
+        count = int(self.next_claim_id)
+        for i in range(count - 1, -1, -1):
+            cid = str(i)
+            if cid in self.claims:
+                c = self.claims[cid]
+                title = ""
+                if c.work_id in self.works:
+                    title = self.works[c.work_id].title
+                out.append({
+                    "id": c.id,
+                    "work_id": c.work_id,
+                    "work_title": title,
+                    "remixer": c.remixer,
+                    "remix_url": c.remix_url,
+                    "status": c.status,
+                    "proposed_split_bps": int(c.proposed_split_bps),
+                    "final_split_bps": int(c.final_split_bps),
+                    "ai_confidence": int(c.ai_confidence),
+                    "appeals": int(c.appeals),
+                    "distributed": c.distributed,
+                    "reason": c.reason[:280],
+                })
+        return out
 
     @gl.public.view
     def list_works(self) -> list:
@@ -576,8 +669,15 @@ Decision guide:
         return {
             "works": int(self.next_work_id),
             "claims": int(self.next_claim_id),
-            "forfeited_pool": str(int(self.forfeited_pool)),
+            "forfeited_pool": str(int(self.forfeited_pool)),    # locked, appeal-eligible
+            "forfeited_final": str(int(self.forfeited_final)),  # sweepable by owner
         }
+
+    @gl.public.view
+    def get_owner(self) -> str:
+        """Exposed so the frontend can render the owner-only sweep panel to
+        the right wallet instead of hiding sweep_forfeited from the UI."""
+        return _addr_str(self.owner)
 
     @gl.public.view
     def get_config(self) -> dict:
