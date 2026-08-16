@@ -5,8 +5,7 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.2.0] — 2026-08-16 (economics fix, runnable tests, live evidence)
 
-**Deployed on studionet:** `TO BE FILLED AFTER DEPLOY`
-(explorer: `https://explorer-studio.genlayer.com/address/<addr>`)
+**Deployed on studionet:** [`0xB9185ccb8D9b6C0667f62B2556596964536a2631`](https://explorer-studio.genlayer.com/address/0xB9185ccb8D9b6C0667f62B2556596964536a2631)
 
 Requires a redeploy: `Claim` gains two persisted fields and the contract gains
 two views, so the v1.1.1 address cannot be upgraded in place.

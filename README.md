@@ -128,8 +128,8 @@ a custom semantic `validator_fn` inside `gl.vm.run_nondet`:
 ## Deployed Contract
 
 - **Network:** GenLayer Studio Network (`studionet`, Chain ID `61999` / `0xF1EF`)
-- **Contract (v1.2.0 — current):** `TO BE FILLED AFTER DEPLOY` — see
-  [`scripts/deploy-notes.md`](scripts/deploy-notes.md)
+- **Contract (v1.2.0 — current):** [`0xB9185ccb8D9b6C0667f62B2556596964536a2631`](https://explorer-studio.genlayer.com/address/0xB9185ccb8D9b6C0667f62B2556596964536a2631)
+- **Deployed:** 2026-08-16 · schema verified live via `gen_getContractSchema` (16 methods)
 - **Block Explorer:** https://explorer-studio.genlayer.com
 
 ### Deprecated addresses
@@ -207,7 +207,7 @@ validator consensus at execution time, so the table says *typical*, not
 ```bash
 cd frontend
 cp .env.example .env
-# Set VITE_CONTRACT_ADDRESS=0x5832270783938d0559BdeD7b9D8AD807b7C2D0E3
+# Set VITE_CONTRACT_ADDRESS=0xB9185ccb8D9b6C0667f62B2556596964536a2631
 # (or your own after redeploying to studionet)
 npm install
 npm run dev

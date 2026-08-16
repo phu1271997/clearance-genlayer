@@ -1,18 +1,28 @@
 # GenLayer Project Explorer — submission draft
 
-**Project:** Clearance · **Prepared:** 2026-08-16 · **Status: DO NOT SUBMIT YET**
+**Project:** Clearance · **Prepared:** 2026-08-16 · **Status: ONE BLOCKER LEFT**
 
-Two things must happen first. Both need a wallet, so neither could be done from
-the repo.
+## Blockers
 
-## ⛔ Blockers
+| # | Blocker | Status |
+|---|---|---|
+| B1 | Deploy contract v1.2.0, point the live app at it | ✅ **done** — `0xB9185ccb8D9b6C0667f62B2556596964536a2631`, schema verified live (16 methods, `list_claims` + `get_owner` present), `VITE_CONTRACT_ADDRESS` rotated on Vercel and redeployed, new address confirmed in the shipped bundle |
+| B2 | Seed the demo data | ⛔ **open** — the fresh contract reads `works: 0, claims: 0`. A reviewer opening the app right now sees an empty catalog and an empty verdict feed, with nothing to evaluate. Needs a funded wallet, so only you can do it. Procedure below |
 
-| # | Blocker | Owner | Why it blocks |
-|---|---|---|---|
-| B1 | Deploy contract v1.2.0 to studionet and update `VITE_CONTRACT_ADDRESS` on Vercel | you | v1.1.1 is still live and has the free-appeal bug. It also lacks `list_claims` / `get_owner`, so `/verdicts` runs a degraded fallback and the owner panel never appears. Steps: [`../scripts/deploy-notes.md`](../scripts/deploy-notes.md) |
-| B2 | Seed the demo data | you | The current chain state is 4 works — two of them named `sd sds s sd` and `dfdfdf` — and 2 claims, **both REJECTED**. No APPROVED, no MODIFIED, no settlement, no appeal. A reviewer opening the app today sees only rejections. Redeploying clears the junk; seeding fills it properly |
+Everything below is written against the state *after* seeding.
 
-Everything below is written against the state *after* those two steps.
+**Verified on this deploy:**
+
+- `gen_getContractSchema` returns 16 methods
+- `counts()` → `{works: 0, claims: 0, forfeited_pool: "0", forfeited_final: "0"}`
+- `get_config()` → deposit `0.01 GEN`, settlement floor `0.10 GEN`,
+  appeal multiplier `2`, max appeals `2`
+- `get_owner()` → `0x3ceaaabddf16d1e05d51fb5e93c86e11d4e5f5bd` — connect that
+  wallet and the owner-only treasury panel appears on `/verdicts`
+- `explorer-studio.genlayer.com/address/0xB918…` renders (200) while a nonsense
+  path 404s, so the routing is real
+- Live app deep links all 200: `/`, `/verdicts`, `/works`, `/register`,
+  `/reputation`, `/claim/0`, `/evidence/`
 
 ---
 
@@ -189,8 +199,8 @@ and stake 0.02 GEN to force a second hearing, capped at two.
 
 | Field | Value |
 |---|---|
-| Contract link | `https://explorer-studio.genlayer.com/address/<v1.2.0 address>` |
-| Address | fill in after deploying |
+| Contract link | `https://explorer-studio.genlayer.com/address/0xB9185ccb8D9b6C0667f62B2556596964536a2631` |
+| Address | `0xB9185ccb8D9b6C0667f62B2556596964536a2631` |
 | Network | studionet |
 | **Status** | **Preview** — studionet is Studio-hosted. Writing "Live" would be a misrepresentation, and it is the first thing a reviewer checks |
 | Website | https://clearance-genlayer.vercel.app |
@@ -212,10 +222,14 @@ every path) — do not use it.
 - [ ] Both category tags map to a function you can point at
 
 **Deploy state**
-- [ ] v1.2.0 deployed, transaction `Result: SUCCESS`
-- [ ] `gen_getContractSchema` returns 16 methods including `list_claims` and `get_owner`
-- [ ] `VITE_CONTRACT_ADDRESS` updated on Vercel **and** redeployed
-- [ ] Explorer address page opened in a browser, shows a SUCCESS transaction
+- [x] v1.2.0 deployed — `0xB9185ccb8D9b6C0667f62B2556596964536a2631`
+- [x] `gen_getContractSchema` returns 16 methods including `list_claims` and `get_owner`
+- [x] `VITE_CONTRACT_ADDRESS` updated on Vercel **and** redeployed; new address
+      confirmed present in the shipped JS bundle and the old one gone
+- [ ] Explorer address page opened **in a browser** and shows a transaction with
+      `GENVM RESULT: SUCCESS` / `CONSENSUS RESULT: Accepted` — the page returns
+      200, but it is a Next SPA, so only a real browser proves the rows render.
+      Check this after seeding, when there are transactions to show
 
 **End-to-end**
 - [ ] Seeded: APPROVED + settled, MODIFIED + settled, REJECTED, appeal
