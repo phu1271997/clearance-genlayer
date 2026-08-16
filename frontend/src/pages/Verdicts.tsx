@@ -33,6 +33,42 @@ export const Verdicts: React.FC = () => {
   const [sweepMsg, setSweepMsg] = useState<string | null>(null);
   const [sweepErr, setSweepErr] = useState<string | null>(null);
 
+  /**
+   * Rebuild the feed one claim at a time.
+   *
+   * `list_claims` and `get_owner` only exist from contract v1.2.0. A build
+   * pointed at an older address — or at one Studio has since reset — would
+   * otherwise show nothing but an error, so fall back to walking claim ids
+   * backwards from `counts()`.
+   */
+  const loadFeedPerClaim = async (client: any, total: number): Promise<ClaimSummary[]> => {
+    const rows: ClaimSummary[] = [];
+    for (let i = total - 1; i >= 0 && rows.length < 40; i--) {
+      try {
+        const c: any = await client.readContract({
+          address: CONTRACT_ADDRESS as `0x${string}`,
+          functionName: 'get_claim',
+          args: [String(i)],
+        });
+        let title = '';
+        try {
+          const w: any = await client.readContract({
+            address: CONTRACT_ADDRESS as `0x${string}`,
+            functionName: 'get_work',
+            args: [String(c.work_id)],
+          });
+          title = w?.title ?? '';
+        } catch {
+          /* work missing — the row is still worth showing */
+        }
+        rows.push({ ...c, work_title: title, reason: (c.reason || '').slice(0, 280) });
+      } catch {
+        /* id gap — keep walking */
+      }
+    }
+    return rows;
+  };
+
   const load = useCallback(async () => {
     if (!CONTRACT_ADDRESS) {
       setLoadError('VITE_CONTRACT_ADDRESS is not set for this build.');
@@ -40,16 +76,19 @@ export const Verdicts: React.FC = () => {
     }
     try {
       const client = makeClient();
-      const [rows, cnt, own] = await Promise.all([
-        client.readContract({ address: CONTRACT_ADDRESS as `0x${string}`, functionName: 'list_claims', args: [] }),
-        client.readContract({ address: CONTRACT_ADDRESS as `0x${string}`, functionName: 'counts', args: [] }),
-        client
-          .readContract({ address: CONTRACT_ADDRESS as `0x${string}`, functionName: 'get_owner', args: [] })
-          .catch(() => null), // older deploys have no get_owner — degrade quietly
-      ]);
-      setClaims((rows as unknown as ClaimSummary[]) ?? []);
-      setCounts(cnt as unknown as Counts);
+      const read = (functionName: string, args: any[] = []) =>
+        client.readContract({ address: CONTRACT_ADDRESS as `0x${string}`, functionName, args });
+
+      const cnt = (await read('counts')) as unknown as Counts;
+      setCounts(cnt);
+
+      const own = await read('get_owner').catch(() => null);
       setOwner(own ? String(own).toLowerCase() : null);
+
+      let rows = (await read('list_claims').catch(() => null)) as ClaimSummary[] | null;
+      if (!rows) rows = await loadFeedPerClaim(client, Number(cnt?.claims ?? 0));
+
+      setClaims(rows);
       setLoadError(null);
     } catch (err: any) {
       console.error('Failed to load verdict feed:', err);
