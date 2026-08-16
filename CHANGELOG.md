@@ -3,9 +3,111 @@
 All notable changes to this project follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] — 2026-08-16 (economics fix, runnable tests, live evidence)
+
+**Deployed on studionet:** `TO BE FILLED AFTER DEPLOY`
+(explorer: `https://explorer-studio.genlayer.com/address/<addr>`)
+
+Requires a redeploy: `Claim` gains two persisted fields and the contract gains
+two views, so the v1.1.1 address cannot be upgraded in place.
+
+### Fixed — appeals were free after a rejection
+
+`appeal()` required `value >= deposit * APPEAL_STAKE_MULTIPLIER`, but
+`_apply_verdict` zeroes `deposit` when it forfeits a REJECTED claim. The
+required stake was therefore `0 * 2 == 0`, and the UI dutifully rendered
+"Appeal (0.0000 GEN stake)" — a rejected remixer could re-run the jury for
+free, indefinitely up to the cap, which is precisely the behaviour the stake
+exists to deter.
+
+`Claim.base_deposit` now records the original `submit_claim` escrow and is
+never mutated; the appeal price is derived from it. Regression test:
+`test_appeal_stake_is_priced_off_base_deposit`.
+
+### Fixed — `UserError` was never in scope
+
+Every validation branch raised a bare `UserError(...)`, but
+`from genlayer import *` exports types and the `gl` proxy — not `UserError`,
+which lives at `gl.vm.UserError`. Bad input still reverted, but the caller got
+`NameError: name 'UserError' is not defined` instead of "insufficient deposit
+(min 0.01 GEN)", which made the frontend's revert-message surfacing useless.
+All 33 raises now use `gl.vm.UserError`.
+
+### Fixed — every explorer link in the repo was dead
+
+`genlayer-explorer.vercel.app` answers `503` on every path. Replaced
+throughout (app, README, CHANGELOG, wallet `blockExplorerUrls`) with
+`explorer-studio.genlayer.com`, verified live: `/address/<addr>` renders while
+a nonsense path 404s, so the routing is real rather than an SPA catch-all.
+
+### Changed — forfeits split into locked and final buckets
+
+A single `forfeited_pool` let the owner sweep money that a later successful
+appeal would have to refund. Now:
+
+- `forfeited_pool` — rejected deposits from claims that can **still** be
+  appealed. Locked; `sweep_forfeited` refuses to touch it.
+- `forfeited_final` — deposits from claims that exhausted `MAX_APPEALS`.
+  The only sweepable bucket.
+
+Winning an appeal moves the claim's share back out of the locked pool into the
+refundable escrow, so an overturned verdict actually returns the money it took.
+
+### Added — public verdict feed and owner treasury panel
+
+- Contract: `list_claims()` (global feed, newest first, joined with the work
+  title) and `get_owner()`.
+- Route `/verdicts`: every adjudication with its verdict, binding split,
+  confidence and on-chain rationale. **Reads without a wallet**, so a
+  first-time visitor sees real evidence before being asked to connect.
+- The same page renders an owner-only treasury panel wired to
+  `sweep_forfeited()`. That method previously had no caller anywhere in the
+  frontend — the contract had no way to expose who the owner was.
+
+### Added — demo evidence pages
+
+`adjudicate()` fetches the work's `source_url` and the claim's `remix_url` with
+`gl.nondet.web.render`. The shipped presets pointed at
+`soundcloud.com/example/...` placeholders that do not exist, so the jury had no
+evidence to weigh and pushed verdicts toward REJECTED regardless of the claim.
+
+Four stable public track pages now ship under `/evidence/` (one original, plus
+an approve / modify / reject remix), and the Register and Submit-Claim forms
+have preset buttons that load matching URLs, declarations and splits. They are
+ordinary public pages fetched on-chain like any other URL, and the walkthrough
+labels the verdicts as typical rather than guaranteed.
+
+### Added — a test suite that actually runs
+
+32 tests, ~0.3 s, no network and no LLM key: `pytest tests/`.
+
+The previous suite used a `gl` fixture that does not exist in `genlayer-test`,
+so it errored during collection and had never run despite the README
+describing its coverage. Deterministic mocking through the hosted simulator is
+not available either — no `sim_installMocks` RPC in the current build. Rebuilt
+on gltest's `direct` runner, which executes the contract natively against an
+in-memory VM with `mock_llm` / `mock_web` cheatcodes.
+
+That runner also exposes `run_validator()`, so `validator_fn` is now tested in
+isolation: it agrees when two validators word the rationale differently, and
+refuses on a different verdict, a split more than ±500 bps apart, confidence
+more than ±20 apart, a leaked canary, or a leader that reverted.
+
+### Added — brand mark
+
+`frontend/public/logo.svg` plus 1024/512 PNG exports for the Project Explorer
+listing, and a matching favicon redrawn for 16–32 px.
+
+### Changed — waiting-for-consensus UX
+
+The pending banner now says what the validators are doing and gives an expected
+30–90 second window instead of an unbounded spinner.
+
+---
+
 ## [1.1.1] — 2026-07-30 (hotfix + polish)
 
-**Deployed on studionet:** [`0x5832270783938d0559BdeD7b9D8AD807b7C2D0E3`](https://genlayer-explorer.vercel.app/address/0x5832270783938d0559BdeD7b9D8AD807b7C2D0E3)
+**Deployed on studionet:** [`0x5832270783938d0559BdeD7b9D8AD807b7C2D0E3`](https://explorer-studio.genlayer.com/address/0x5832270783938d0559BdeD7b9D8AD807b7C2D0E3)
 
 ### Added — Documentation Overhaul v2
 
@@ -83,7 +185,7 @@ to the new address.
 
 ## [1.1.0] — 2026-07-30
 
-**Deployed on studionet:** [`0xD1cbE5E47ebaE8a2c879913801ee275cfDbd0356`](https://genlayer-explorer.vercel.app/address/0xD1cbE5E47ebaE8a2c879913801ee275cfDbd0356)
+**Deployed on studionet:** [`0xD1cbE5E47ebaE8a2c879913801ee275cfDbd0356`](https://explorer-studio.genlayer.com/address/0xD1cbE5E47ebaE8a2c879913801ee275cfDbd0356)
 *Deprecated — every write reverts. Replaced by v1.1.1.*
 
 **Milestone submission:** *Security Hardening Bundle v1 + AI Enhancement +

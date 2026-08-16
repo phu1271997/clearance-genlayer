@@ -2,7 +2,7 @@
 
 > **An on-chain AI jury clears music samples in minutes, not months.**
 
-**Current version:** `v1.1.1` — see [`CHANGELOG.md`](CHANGELOG.md) and
+**Current version:** `v1.2.0` — see [`CHANGELOG.md`](CHANGELOG.md) and
 [`SECURITY.md`](SECURITY.md).
 
 ---
@@ -46,8 +46,12 @@ adjudicates compliance and computes binding royalty splits.
   system prompt; the validator refuses if the leader output leaks it.
   Inputs containing the token are rejected at the boundary.
 - **Economic Escrow.** Remixers deposit 0.01 GEN per claim. On
-  APPROVED/MODIFIED, deposit is refunded through `distribute()`. On
-  REJECTED, deposit moves to a `forfeited_pool` (deters bad-faith spam).
+  APPROVED/MODIFIED the deposit is refunded through `distribute()`. On
+  REJECTED it is forfeited, and an appeal costs 2× the original deposit —
+  priced off an immutable `base_deposit` so a rejection can never make the
+  next appeal free. Forfeits stay **locked** while appeals remain and only
+  become owner-sweepable once they are exhausted. Full model in
+  [`ECONOMICS.md`](ECONOMICS.md).
 
 *Remove the AI + web layer and this becomes a Google Form. It cannot be
 built as a normal smart contract.*
@@ -87,7 +91,9 @@ Full breakdown in [`ARCHITECTURE.md`](ARCHITECTURE.md). Short version:
 |    - confidence within ±20 points                                                 |
 |    - refuse if leader output leaks CANARY_TOKEN                                   |
 |                                                                                   |
-|  _apply_verdict(): update Claim, bump reputation, forfeit deposit on REJECTED     |
+|  _apply_verdict(): update Claim, bump reputation, and move the escrow —           |
+|    APPROVED/MODIFIED -> reclaim any locked forfeit back into the deposit          |
+|    REJECTED          -> forfeit; locked while appeals remain, final once spent    |
 +-----------------------------------------------------------------------------------+
                                        |
                                        | distribute(claim_id) [Payable, REMIXER ONLY, >= 0.10 GEN]
@@ -122,22 +128,55 @@ a custom semantic `validator_fn` inside `gl.vm.run_nondet`:
 ## Deployed Contract
 
 - **Network:** GenLayer Studio Network (`studionet`, Chain ID `61999` / `0xF1EF`)
-- **Contract (v1.1.1 — current):** [`0x5832270783938d0559BdeD7b9D8AD807b7C2D0E3`](https://genlayer-explorer.vercel.app/address/0x5832270783938d0559BdeD7b9D8AD807b7C2D0E3)
-- **Contract (v1.1.0 — deprecated):** `0xD1cbE5E47ebaE8a2c879913801ee275cfDbd0356` (writes revert — see CHANGELOG 1.1.1)
-- **Contract (v1.0.0 — deprecated):** `0x6D7F886071935061B3C1C69DaA0ddb1d143Ced8E`
-- **Block Explorer:** https://genlayer-explorer.vercel.app
+- **Contract (v1.2.0 — current):** `TO BE FILLED AFTER DEPLOY` — see
+  [`scripts/deploy-notes.md`](scripts/deploy-notes.md)
+- **Block Explorer:** https://explorer-studio.genlayer.com
+
+### Deprecated addresses
+
+| Version | Address | Why it was retired |
+|---|---|---|
+| v1.1.1 | `0x5832270783938d0559BdeD7b9D8AD807b7C2D0E3` | Appeal stake priced off `deposit`, which REJECTED zeroes → post-rejection appeals were free (see CHANGELOG 1.2.0) |
+| v1.1.0 | `0xD1cbE5E47ebaE8a2c879913801ee275cfDbd0356` | Every write reverted — `DynArray[str]` reverse indices |
+| v1.0.0 | `0x6D7F886071935061B3C1C69DaA0ddb1d143Ced8E` | Superseded by the v1.1.0 security pass |
+
+> ⚠️ Through v1.1.1 every explorer link in this repo pointed at
+> `genlayer-explorer.vercel.app`, which now answers `503` on every path. The
+> live studionet explorer is `explorer-studio.genlayer.com`.
 
 ---
 
 ## Live App
 
 - **Vercel Live URL:** https://clearance-genlayer.vercel.app
+- **Public verdict feed (no wallet needed):** https://clearance-genlayer.vercel.app/verdicts
+- **Evidence pages the jury reads:** https://clearance-genlayer.vercel.app/evidence/
 
 ---
 
-## Demo Video
+## Demo Evidence Pages
 
-- **Walkthrough Video:** *`[DEMO VIDEO LINK PLACEHOLDER — v1.1.0 flow: register → submit → adjudicate → distribute (dust-rejected) → appeal]`*
+Adjudication is only as good as the evidence it can fetch. `adjudicate()` calls
+`gl.nondet.web.render` on the work's `source_url` and the claim's `remix_url`,
+so a dead or unrelated link gives the jury nothing to weigh and pushes every
+verdict toward REJECTED.
+
+To make the flow reproducible for anyone testing it, the dApp publishes four
+stable public track pages under [`/evidence/`](https://clearance-genlayer.vercel.app/evidence/):
+
+| Page | Scenario | Typical verdict |
+|---|---|---|
+| `original-neon-rain.html` | The registered work and its sampling policy | — (this is the `source_url`) |
+| `remix-approved.html` | 3-second instrumental loop, credited | APPROVED at 0% |
+| `remix-modified.html` | 12-second loop, credited, split proposed too low | MODIFIED to 25% |
+| `remix-rejected.html` | Vocal hook used in an alcohol advertisement | REJECTED |
+
+These are ordinary public web pages fetched on-chain like any other URL — not
+mocks, and not a shortcut around consensus. Any real SoundCloud or YouTube link
+works the same way; these simply guarantee readable, stable content. Mira
+Solvang, KVSTLE and Vodka Nord are fictional. The verdict still comes from
+validator consensus at execution time, so the table says *typical*, not
+*guaranteed*.
 
 ---
 
@@ -152,7 +191,14 @@ a custom semantic `validator_fn` inside `gl.vm.run_nondet`:
 6. In transaction details, verify **Result: SUCCESS** (not just
    `Status: FINALIZED`).
 7. Copy the deployed contract address and update
-   `VITE_CONTRACT_ADDRESS` in [`frontend/.env`](frontend/.env).
+   `VITE_CONTRACT_ADDRESS` in [`frontend/.env`](frontend/.env) **and** in the
+   Vercel project's environment variables, then redeploy the frontend.
+8. Confirm the contract is live and its schema is readable:
+   ```bash
+   curl -s -X POST https://studio.genlayer.com/api -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"gen_getContractSchema","params":["0xYOUR_ADDRESS"]}'
+   ```
+   A JSON list of methods means the deploy took. An error means the contract is
+   gone (Studio storage reset) and must be redeployed.
 
 ---
 
@@ -175,18 +221,76 @@ Launches at `http://localhost:3000`.
 
 ```bash
 pip install genlayer-test
-gltest --network studionet
+pytest tests/
 ```
 
-Test suite covers happy path, MODIFIED, REJECTED-forfeits-to-pool, dust
-distribute rejection, non-remixer payer rejection, replay rejection,
-artist-rounds-to-zero, appeal round-trip, and owner sweep. See
-[`tests/test_clearance.py`](tests/test_clearance.py).
+**32 tests, ~0.3s, no network and no LLM key required.** The suite runs on
+gltest's *direct* runner: the contract executes natively in Python against an
+in-memory VM, and `vm.mock_llm` / `vm.mock_web` supply the jury's answers, so
+every run is deterministic.
 
-Mock installation follows the R17 format documented in
-[gen-rules `02-common-errors.md`](../gen-rules/mới/02-common-errors.md) —
-`params` is a bare dict with `llm_mocks` / `web_mocks` keys, not a
-wrapping list.
+Coverage:
+
+- happy path (APPROVED → `distribute`), MODIFIED, REJECTED
+- settlement guards: dust payments, non-remixer payer, replay, artist share
+  rounding to zero
+- appeal flow: winning an appeal restores the forfeited escrow; the stake is
+  priced off `base_deposit`; only the remixer may appeal; appeals are capped
+- forfeit buckets: locked vs final, and that `sweep_forfeited` only touches
+  the final one
+- input validation at the boundary, including the prompt-injection canary
+- **`validator_fn` semantics in isolation** — it agrees when two validators
+  word the rationale differently, and disagrees on a different verdict, a
+  split more than ±500 bps apart, confidence more than ±20 apart, a leaked
+  canary, or a leader that reverted
+- public read surface: `list_claims()`, `get_owner()`, `get_config()`
+
+Earlier versions of this file claimed a `gltest --network studionet` suite.
+Those tests used a `gl` fixture that does not exist in `genlayer-test`, so the
+suite errored at collection and had never actually run. Deterministic mocking
+through the hosted simulator is not possible either — the `sim_installMocks`
+RPC is not exposed by the current build. Direct mode replaces both.
+
+To also exercise the contract against a live network, point the same file at
+`gltest --network studionet` with funded account keys in `gltest.config.yaml`;
+the non-deterministic assertions will then depend on real validator output.
+
+See [`tests/test_clearance.py`](tests/test_clearance.py).
+
+---
+
+## Seed the Demo Data
+
+A fresh deploy has an empty catalog, and a visitor who lands on an empty app
+has nothing to judge. Seeding needs a wallet holding GEN **on studionet** —
+top it up from the Studio **Accounts** panel, not the testnet faucet.
+
+Budget roughly **1.5 GEN** to walk every path once:
+
+| Step | Wallet | Cost |
+|---|---|---|
+| Register "Neon Rain" | artist | gas only |
+| Submit + adjudicate the APPROVED claim | remixer | 0.01 GEN deposit |
+| Settle it (`distribute`) | remixer | ≥ 0.10 GEN, deposit refunded |
+| Submit + adjudicate the MODIFIED claim | remixer | 0.01 GEN deposit |
+| Settle it | remixer | ≥ 0.10 GEN, deposit refunded |
+| Submit + adjudicate the REJECTED claim | remixer | 0.01 GEN, forfeited |
+| Appeal the rejection | remixer | 0.02 GEN stake |
+
+Use the preset buttons on the Register and Submit-Claim forms — they fill in
+the evidence URLs, declarations and splits described above. To register the
+works from the command line instead:
+
+```bash
+cd frontend
+CLEARANCE_ADDR=0x... CLEARANCE_PRIVATE_KEY=0x... node ../scripts/seed.mjs
+```
+
+Keep that key in your shell, never in a `VITE_` variable — anything prefixed
+`VITE_` is bundled into the shipped JavaScript and is publicly readable.
+
+Afterwards open `/verdicts` in a private window with no wallet connected. The
+evidence has to be visible to a stranger.
 
 ---
 
@@ -194,13 +298,13 @@ wrapping list.
 
 Portal: https://portal.genlayer.foundation/#/builders/contributions
 
-Contribution type: GenLayer App / Intelligent Contract. v1.1.1 ships as
-one bundled milestone submission covering Security Hardening,
-AI Enhancement, Appeal Flow, Owner Sweep, Reputation, Documentation
-Overhaul v2, UX Polish v1, and Demo-Seed tooling. See
+Contribution type: GenLayer App / Intelligent Contract. See
 [`CHANGELOG.md`](CHANGELOG.md), [`SECURITY.md`](SECURITY.md),
 [`ECONOMICS.md`](ECONOMICS.md), [`CONTRIBUTING.md`](CONTRIBUTING.md),
 and [`docs/adr/`](docs/adr/).
+
+Deployed on GenLayer **studionet** via GenLayer Studio — which is why the
+Project Explorer listing carries status **Preview**, not Live.
 
 ---
 
@@ -209,7 +313,13 @@ and [`docs/adr/`](docs/adr/).
 - **Pragma:** `# v0.2.16` + `Depends: py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6`.
 - **API Choice:** Uses `gl.vm.run_nondet` (sandboxed). Never
   `run_nondet_unsafe`.
-- **Constants (v1.1.0):** `CLAIM_DEPOSIT_MIN = 0.01 GEN`,
+- **`UserError` is not a star-import.** `from genlayer import *` exports
+  types and `gl`, not `UserError` — it lives at `gl.vm.UserError`. Through
+  v1.1.1 every validation branch raised a bare `UserError(...)`, so instead of
+  a readable revert reason the caller got `NameError: name 'UserError' is not
+  defined`. Fixed in v1.2.0; the frontend's revert-surfacing now shows the
+  real message.
+- **Constants:** `CLAIM_DEPOSIT_MIN = 0.01 GEN`,
   `SETTLEMENT_MIN = 0.10 GEN`, `APPEAL_STAKE_MULTIPLIER = 2`,
   `MAX_APPEALS = 2`. Read live from the chain via `get_config()`.
 

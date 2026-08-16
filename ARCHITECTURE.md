@@ -23,9 +23,10 @@
 │    ├─ Storage (TreeMap / DynArray / bigint / u8/u16 — no bare int)    │
 │    ├─ Write:  register_work / submit_claim / adjudicate / appeal /    │
 │    │          distribute / sweep_forfeited                            │
-│    ├─ View:   get_work / get_claim / list_works /                     │
-│    │          list_claims_for_work / get_reputation /                 │
-│    │          counts / get_config                                     │
+│    │          (every one of these has a caller in the frontend)        │
+│    ├─ View:   get_work / get_claim / list_claims / list_works /       │
+│    │          list_claims_for_work / list_works_by_artist /           │
+│    │          get_reputation / counts / get_config / get_owner        │
 │    └─ Non-det: gl.vm.run_nondet(leader_fn, validator_fn)              │
 │         ├─ gl.nondet.web.render(remix_url) ┐                          │
 │         ├─ gl.nondet.web.render(source_url)│  ← public web            │
@@ -45,7 +46,8 @@ class Contract(gl.Contract):
     works:            TreeMap[str, Work]                # work_id → Work
     claims:           TreeMap[str, Claim]               # claim_id → Claim
     reputation:       TreeMap[str, Reputation]          # address → tally
-    forfeited_pool:   bigint                            # sum of REJECTED deposits
+    forfeited_pool:   bigint     # REJECTED deposits still appeal-eligible (locked)
+    forfeited_final:  bigint     # REJECTED deposits past MAX_APPEALS (sweepable)
     next_work_id:     bigint
     next_claim_id:    bigint
     owner:            Address
@@ -103,8 +105,8 @@ sequenceDiagram
         IC->>Artist: emit_transfer(to_artist)
         IC->>Remixer: emit_transfer(to_remixer + deposit refund)
     else REJECTED
-        Note over IC: deposit → forfeited_pool
-        Remixer->>IC: appeal(claim_id) {value = 2× deposit}   (optional)
+        Note over IC: deposit → forfeited_pool (locked while appeals remain)
+        Remixer->>IC: appeal(claim_id) {value = 2× base_deposit}   (optional)
     end
 ```
 
@@ -149,12 +151,20 @@ frontend/src/
 │   └── VerdictCard.tsx    verdict + reason + confidence + explorer link
 └── pages/
     ├── Home.tsx           counters + hero + protocol lifecycle
+    ├── Verdicts.tsx       list_claims + counts + get_owner
+    │                      → public feed, readable with no wallet
+    │                      → owner-only panel calling sweep_forfeited
     ├── Works.tsx          list_works
     ├── WorkDetail.tsx     get_work + list_claims_for_work
     ├── RegisterWork.tsx   register_work
     ├── SubmitClaim.tsx    submit_claim {value = 0.01 GEN}
     ├── ClaimDetail.tsx    get_claim + adjudicate + distribute + appeal
-    └── MyWorks.tsx        works_by_artist for the connected wallet
+    ├── Reputation.tsx     get_reputation
+    └── MyWorks.tsx        list_works_by_artist for the connected wallet
+
+public/
+└── evidence/              four static track pages the jury fetches on-chain
+                           via gl.nondet.web.render — see README
 ```
 
 `network.ts` reads the chain ID from `studionet.id`, not a hardcoded
@@ -168,6 +178,10 @@ constant — if GenLayer moves the chain, the app follows.
 - Payer enforcement (remixer only) + settlement floor + artist-share
   integrity check.
 - Address canonicalisation via `_addr_str()`.
-- Owner sweep of a **separate** forfeited-pool bucket — never touches
+- Owner sweep of the **final** forfeit bucket only — never touches
   live-claim deposits.
 - Prompt-injection canary defense on inputs, prompt, and validator.
+- Appeal stake priced off the immutable `base_deposit`, so forfeiting the
+  live escrow cannot make the next appeal free.
+- User-facing reverts raise `gl.vm.UserError`, not a bare `UserError`,
+  which is not in the star-import and produced a `NameError` instead.

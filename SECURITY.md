@@ -90,8 +90,11 @@ Coverage lives in [`tests/test_clearance.py`](tests/test_clearance.py):
 | T10 | Public-view calldata boundary rejects `Address` key | Every `TreeMap` keyed by `str` (canonical hex) | Pre-existing |
 | T11 | Bad-faith claim spam (attacker floods `REJECTED` claims) | Deposit is **forfeited** to `forfeited_pool`, not refunded → non-trivial spam cost | **Fixed v1.1.0** |
 | T12 | Genuine misjudgment by AI jury | `appeal()` — remixer re-stakes 2× the original deposit to force one re-adjudication, capped at `MAX_APPEALS = 2` | **New v1.1.0** |
-| T13 | Owner drain of user deposits | `sweep_forfeited()` moves **only** the `forfeited_pool`; live claim deposits are held in a separate accounting invariant and never touched | **Fixed v1.1.0** |
+| T13 | Owner drain of user deposits | `sweep_forfeited()` moves **only** `forfeited_final`; live claim deposits and appeal-eligible forfeits (`forfeited_pool`) are separate buckets it cannot touch | **Fixed v1.1.0, tightened v1.2.0** |
 | T14 | Recipient of `sweep_forfeited()` set to garbage | Address validated (`0x…` prefix) and used via `Address(recipient)` | **Fixed v1.1.0** |
+| T15 | Free appeals after a rejection | `appeal()` priced off the immutable `Claim.base_deposit`. Previously it used `deposit`, which REJECTED zeroes, so the required stake evaluated to `0 × 2 == 0` and a rejected remixer could re-run the jury at no cost up to the cap. Regression test: `test_appeal_stake_is_priced_off_base_deposit` | **Fixed v1.2.0** |
+| T16 | Owner sweeps money a winning appeal must refund | Forfeits are locked in `forfeited_pool` while appeals remain and only move to the sweepable `forfeited_final` once `MAX_APPEALS` is spent. A successful appeal pulls the claim's share back into its refundable escrow | **Fixed v1.2.0** |
+| T17 | Revert reasons unreadable to the caller | Validation raised a bare `UserError`, which `from genlayer import *` does not export — callers got `NameError: name 'UserError' is not defined` instead of the message. All raises now use `gl.vm.UserError`. Bad input always reverted, so this was a diagnosability defect, not a bypass | **Fixed v1.2.0** |
 | T15 | Storage read inside nondet block | All state read into locals **before** entering the `leader_fn` closure | Pre-existing |
 
 ### 2.4 Constants
