@@ -17,7 +17,13 @@ export function makeClient(userAddress?: `0x${string}`) {
 }
 
 export const CHAIN = studionet;
-export const EXPLORER_URL = 'https://genlayer-explorer.vercel.app';
+
+// studionet's block explorer. The older `genlayer-explorer.vercel.app` host
+// this repo used through v1.1.1 now answers 503 on every path, so every
+// "view on explorer" link in the app was dead. `explorer-studio.genlayer.com`
+// is the live one — a nonsense path there 404s while /address/<addr> renders,
+// which is how we confirmed the routing is real and not an SPA catch-all.
+export const EXPLORER_URL = 'https://explorer-studio.genlayer.com';
 
 /**
  * Wait for a submitted write tx to finalize and surface the on-chain execution
