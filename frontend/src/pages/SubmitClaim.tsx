@@ -4,7 +4,14 @@ import { makeClient, CONTRACT_ADDRESS, awaitTxFinalized } from '../lib/genlayer'
 import { Work } from '../lib/types';
 import { useWallet } from '../context/WalletContext';
 import { PendingBanner } from '../components/PendingBanner';
-import { Disc, Globe, FileCheck, Percent, ShieldAlert, ArrowLeft, AlertCircle, CheckCircle } from 'lucide-react';
+import { SAMPLE_CLAIMS, SampleClaimPreset } from '../data/sampleWorks';
+import { Disc, Globe, FileCheck, Percent, ShieldAlert, ArrowLeft, AlertCircle, CheckCircle, Wand2 } from 'lucide-react';
+
+const EXPECT_STYLE: Record<SampleClaimPreset['expects'], string> = {
+  APPROVED: 'border-emerald-500/40 bg-emerald-950/30 text-emerald-300',
+  MODIFIED: 'border-amber-500/40 bg-amber-950/30 text-amber-300',
+  REJECTED: 'border-rose-500/40 bg-rose-950/30 text-rose-300',
+};
 
 export const SubmitClaim: React.FC = () => {
   const { workId } = useParams<{ workId: string }>();
@@ -22,6 +29,15 @@ export const SubmitClaim: React.FC = () => {
   const [pendingTxHash, setPendingTxHash] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [createdClaimId, setCreatedClaimId] = useState<string | null>(null);
+  const [activePreset, setActivePreset] = useState<string | null>(null);
+
+  const applyPreset = (p: SampleClaimPreset) => {
+    setRemixUrl(p.remix_url);
+    setDeclaration(p.declaration);
+    setSplitPct(p.proposed_split_bps / 100);
+    setActivePreset(p.id);
+    setError(null);
+  };
 
   useEffect(() => {
     async function loadWork() {
@@ -165,6 +181,44 @@ export const SubmitClaim: React.FC = () => {
             <span>{error}</span>
           </div>
         )}
+
+        <div className="bg-[#0b0c13] border border-slate-800 rounded-2xl p-4 space-y-3">
+          <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-purple-300">
+            <Wand2 className="w-4 h-4" />
+            <span>Load a demo claim</span>
+          </div>
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            Each preset points at a stable public evidence page the dApp publishes at{' '}
+            <a href="/evidence/" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">
+              /evidence/
+            </a>
+            , so the jury has real page text to weigh. Read the page first, then submit — the
+            verdict comes from validator consensus at execution time, not from this label.
+          </p>
+          <div className="grid sm:grid-cols-3 gap-2">
+            {SAMPLE_CLAIMS.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => applyPreset(p)}
+                className={`text-left rounded-xl border p-3 space-y-1.5 transition-all hover:brightness-125 ${
+                  activePreset === p.id ? 'ring-2 ring-purple-500/70' : ''
+                } ${EXPECT_STYLE[p.expects]}`}
+              >
+                <div className="text-[10px] font-bold uppercase tracking-wider">
+                  usually {p.expects}
+                </div>
+                <div className="text-xs font-semibold text-slate-100 leading-snug">{p.label}</div>
+                <div className="text-[10px] text-slate-400 leading-relaxed">{p.why}</div>
+              </button>
+            ))}
+          </div>
+          {activePreset && (
+            <p className="text-[11px] text-emerald-300">
+              Preset loaded into the form below. Edit anything you like before submitting.
+            </p>
+          )}
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Clearance — demo evidence pages</title>
+<meta name="description" content="Stable public track pages used as web evidence by the Clearance on-chain AI jury.">
+<style>
+ body{background:#0b0c13;color:#e2e8f0;font:15px/1.65 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;padding:40px 20px}
+ main{max-width:760px;margin:0 auto}
+ h1{font-size:26px;margin:0 0 6px} p.lead{color:#94a3b8;font-size:14px}
+ ul{list-style:none;padding:0;margin:28px 0 0}
+ li{border:1px solid #1e293b;border-radius:12px;padding:14px 16px;margin-bottom:12px;background:#121422}
+ li b{display:block;font-size:15px;margin-bottom:2px}
+ li span{color:#94a3b8;font-size:13px}
+ code{background:#0b0c13;border:1px solid #1e293b;border-radius:5px;padding:1px 5px;font-size:12.5px}
+ a{color:#22d3ee;text-decoration:none} a:hover{text-decoration:underline}
+ .tag{display:inline-block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:2px 7px;border-radius:99px;margin-left:6px;vertical-align:2px}
+ .ok{background:#064e3b;color:#6ee7b7} .mod{background:#451a03;color:#fcd34d} .no{background:#4c0519;color:#fda4af} .src{background:#2e1065;color:#c4b5fd}
+</style>
+</head>
+<body>
+<main>
+  <h1>Demo evidence pages</h1>
+  <p class="lead">
+    Clearance adjudicates on-chain: GenLayer validators call
+    <code>gl.nondet.web.render</code> on the URLs stored in a work and a claim, then
+    weigh that page text against the artist's natural-language licence. These four pages
+    are stable, readable public URLs published by the dApp so anyone can reproduce each
+    verdict path end to end. Any real public URL works exactly the same way.
+  </p>
+
+  <ul>
+    <li>
+      <b>Neon Rain — Mira Solvang <span class="tag src">original</span></b>
+      <span>Use as <code>source_url</code> when registering the work. States the sampling
+      policy the licence text mirrors.</span>
+      <p><a href="./original-neon-rain.html">/evidence/original-neon-rain.html</a></p>
+    </li>
+    <li>
+      <b>Halogen (Neon Rain edit) <span class="tag ok">expects APPROVED</span></b>
+      <span>3-second instrumental loop, credited, no advertising. Under the 4-second free
+      threshold, so a 0% proposed split satisfies the licence.</span>
+      <p><a href="./remix-approved.html">/evidence/remix-approved.html</a></p>
+    </li>
+    <li>
+      <b>Long Exposure (Neon Rain rework) <span class="tag mod">expects MODIFIED</span></b>
+      <span>12-second instrumental loop, credited. The licence requires 25% for samples
+      of 4–15 seconds, so an under-proposed split gets corrected upward.</span>
+      <p><a href="./remix-modified.html">/evidence/remix-modified.html</a></p>
+    </li>
+    <li>
+      <b>Hold The Line (Vodka Nord cut) <span class="tag no">expects REJECTED</span></b>
+      <span>Vocal hook sampled and used in an alcohol advertisement — two independent
+      licence violations. Deposit is forfeited.</span>
+      <p><a href="./remix-rejected.html">/evidence/remix-rejected.html</a></p>
+    </li>
+  </ul>
+
+  <p class="lead" style="margin-top:28px">
+    Mira Solvang, KVSTLE and Vodka Nord are fictional. Verdicts are produced by GenLayer
+    validator consensus at execution time, not by this site — the same URL can in
+    principle be judged differently as models change, which is the point of recording the
+    verdict and its reasoning on-chain. &nbsp;<a href="/">← Back to the app</a>
+  </p>
+</main>
+</body>
+</html>
