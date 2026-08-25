@@ -6,6 +6,7 @@ import { useWallet } from '../context/WalletContext';
 import { VerdictCard } from '../components/VerdictCard';
 import { PendingBanner } from '../components/PendingBanner';
 import { CopyButton } from '../components/CopyButton';
+import { decodeRevert, preflightSubmit } from '../lib/preflight';
 import { Cpu, Scale, Coins, ArrowLeft, RefreshCw, ExternalLink, Globe, FileText, CheckCircle2, AlertCircle, ShieldAlert, Gavel } from 'lucide-react';
 
 const SETTLEMENT_MIN_GEN_FALLBACK = 0.1;
@@ -102,6 +103,12 @@ export const ClaimDetail: React.FC = () => {
     setPendingTxHash(undefined);
 
     try {
+      const warn = await preflightSubmit(address, BigInt(0), 'adjudicate');
+      if (warn) {
+        setActionError(warn);
+        setIsAdjudicating(false);
+        return;
+      }
       const client = makeClient(address);
       const txHash = await client.writeContract({
         address: CONTRACT_ADDRESS as `0x${string}`,
@@ -124,7 +131,7 @@ export const ClaimDetail: React.FC = () => {
       await fetchClaimAndWork();
     } catch (err: any) {
       console.error(err);
-      setActionError(err?.message || 'Adjudication execution failed');
+      setActionError(decodeRevert(err));
     } finally {
       setIsAdjudicating(false);
     }
@@ -161,8 +168,14 @@ export const ClaimDetail: React.FC = () => {
     setPendingTxHash(undefined);
 
     try {
-      const client = makeClient(address);
       const weiVal = BigInt(Math.floor(valNum * 1e18));
+      const warn = await preflightSubmit(address, weiVal, 'distribute');
+      if (warn) {
+        setActionError(warn);
+        setIsDistributing(false);
+        return;
+      }
+      const client = makeClient(address);
 
       const txHash = await client.writeContract({
         address: CONTRACT_ADDRESS as `0x${string}`,
@@ -185,7 +198,7 @@ export const ClaimDetail: React.FC = () => {
       await fetchClaimAndWork();
     } catch (err: any) {
       console.error(err);
-      setActionError(err?.message || 'Distribution failed');
+      setActionError(decodeRevert(err));
     } finally {
       setIsDistributing(false);
     }
@@ -223,6 +236,12 @@ export const ClaimDetail: React.FC = () => {
         ? BigInt(claim.base_deposit)
         : BigInt(claim.deposit);
       const stakeWei = reference * BigInt(appealMultiplier);
+      const warn = await preflightSubmit(address, stakeWei, 'appeal');
+      if (warn) {
+        setActionError(warn);
+        setIsAppealing(false);
+        return;
+      }
       const client = makeClient(address);
       const txHash = await client.writeContract({
         address: CONTRACT_ADDRESS as `0x${string}`,
@@ -244,7 +263,7 @@ export const ClaimDetail: React.FC = () => {
       await fetchClaimAndWork();
     } catch (err: any) {
       console.error(err);
-      setActionError(err?.message || 'Appeal failed');
+      setActionError(decodeRevert(err));
     } finally {
       setIsAppealing(false);
     }

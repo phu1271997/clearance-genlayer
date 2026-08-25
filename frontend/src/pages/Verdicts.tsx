@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { makeClient, CONTRACT_ADDRESS, EXPLORER_URL, awaitTxFinalized } from '../lib/genlayer';
 import { ClaimSummary, ClaimStatus, Counts } from '../lib/types';
@@ -172,6 +172,22 @@ export const Verdicts: React.FC = () => {
     });
   }, [claims, statusFilter, searchQuery]);
 
+  // Global "/" shortcut focuses the search box, mirroring GitHub / Slack.
+  // Ignored while the user is already typing in an input.
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+      if (target?.isContentEditable) return;
+      e.preventDefault();
+      searchInputRef.current?.focus();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   const statusCount = useMemo(() => {
     const base: Record<StatusFilter, number> = {
       ALL: 0, APPROVED: 0, MODIFIED: 0, REJECTED: 0, PENDING: 0,
@@ -306,13 +322,20 @@ export const Verdicts: React.FC = () => {
           <div className="relative">
             <Search className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
             <input
+              ref={searchInputRef}
               type="search"
               value={searchQuery}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search claim id, work title, remixer, remix URL, or rationale…"
-              className="w-full bg-[#0b0c13] border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-slate-100 text-sm focus:outline-none focus:border-purple-500 transition-colors"
-              aria-label="Search verdicts"
+              placeholder="Search claim id, work title, remixer, remix URL, or rationale…    (press /)"
+              className="w-full bg-[#0b0c13] border border-slate-800 rounded-xl pl-9 pr-14 py-2.5 text-slate-100 text-sm focus:outline-none focus:border-purple-500 transition-colors"
+              aria-label="Search verdicts (press slash to focus)"
             />
+            <kbd
+              aria-hidden="true"
+              className="absolute right-3 top-2.5 text-[10px] font-mono text-slate-500 border border-slate-700 rounded px-1.5 py-0.5 bg-slate-900"
+            >
+              /
+            </kbd>
           </div>
           {(statusFilter !== 'ALL' || searchQuery) && (
             <div className="flex items-center gap-2 text-[11px] text-slate-500">

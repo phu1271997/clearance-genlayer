@@ -3,6 +3,93 @@
 All notable changes to this project follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] — 2026-08-25 (leaderboard, preflight, revert decoder, docs pack v3)
+
+**Contract:** unchanged from v1.2.0
+(`0xB9185ccb8D9b6C0667f62B2556596964536a2631`). Storage layout, ABI and
+economics are identical to v1.2.0/v1.3.0 — **no redeploy required**.
+
+### Added — client-side leaderboard at `/leaderboard`
+
+A new page aggregates `list_works()` + `list_claims()` on the browser
+and ranks:
+
+- **Top artists** by number of works registered, tie-broken by
+  APPROVED / MODIFIED claims filed against their catalog.
+- **Top remixers** by good-faith rate — `(APPROVED + MODIFIED) /
+  decided` — tie-broken by decided-claim count so a single 100% row
+  cannot outrank a busier one.
+
+Each row copies the address, links to the per-address `/reputation`
+deep-dive, and shows the raw APPROVED / MODIFIED / REJECTED
+distribution. The contract needs no new methods for this — the raw feed
+carries every field required to compute the rankings.
+
+### Added — preflight balance check before every payable write
+
+`register_work`, `submit_claim`, `adjudicate`, `distribute`, and
+`appeal` all now call `preflightSubmit(address, requiredValueWei,
+label)` before opening MetaMask. The check reads the wallet's studionet
+balance and, if it's under `value + 0.002 GEN` gas headroom, blocks the
+signature and surfaces a specific message: *"Wallet 0xabcd…1234 has 0
+GEN on studionet. Top it up from the Studio Accounts panel — the
+testnet faucet funds a different chain."* No more failed transactions
+just because the wallet is empty on the wrong network.
+
+### Added — friendly on-chain revert decoder
+
+`decodeRevert()` maps the eighteen `raise gl.vm.UserError(...)` strings
+the contract can throw to actionable one-liners. Wired into every catch
+block in `RegisterWork`, `SubmitClaim`, and `ClaimDetail`. Example
+transformations:
+
+| Contract raises | User now sees |
+|---|---|
+| `insufficient deposit (min 0.01 GEN)` | *"Deposit is below the 0.01 GEN minimum. Increase the amount and retry."* |
+| `only the remixer may distribute this claim` | *"Only the remixer wallet can settle this claim. Switch MetaMask to the remixer address."* |
+| `settlement amount below minimum (0.10 GEN)` | *"Settlement is below the 0.10 GEN floor. Enter at least 0.10 GEN."* |
+| `insufficient appeal stake …` | *"Appeal stake below 2× the original deposit. The frontend should compute this — refresh the page."* |
+
+The full mapping list lives in `frontend/src/lib/preflight.ts` and is
+mirrored in the revert-reason table of the new `docs/API.md`.
+
+### Added — keyboard shortcut and skip-to-content
+
+- Pressing **`/`** anywhere on `/verdicts` focuses the search box
+  (ignored while an input already has focus). A `kbd` badge inside the
+  search input advertises the shortcut.
+- A `Skip to main content` link jumps past the nav for keyboard and
+  screen-reader users; visually hidden until it takes focus.
+- Global `:focus-visible` outline so keyboard navigation is legible
+  everywhere without polluting mouse interactions.
+
+### Added — `docs/API.md`
+
+Full reference for every one of the sixteen contract methods — six
+write, ten view — with signatures, semantics, revert reasons,
+JavaScript examples through `genlayer-js`, and a raw JSON-RPC `curl`
+snippet. Cross-linked from the README badges block.
+
+### Added — `docs/DEMO-SCRIPT.md`
+
+Three-minute recorded-walkthrough screenplay with per-beat timings,
+suggested screen state, drop-if-overrunning cues, and a recording
+checklist. Meant to be reused verbatim for the Portal submission video.
+
+### Added — README badges
+
+Network / contract version / frontend version / test-count / license
+badges above the fold, plus explicit links to
+`docs/{ONBOARDING,API,DEMO-SCRIPT}.md` and the Vietnamese README.
+
+### Changed — nav gains a Leaderboard tab
+
+Reused the same `NAV_ITEMS` list on both desktop and mobile, so the new
+route is reachable from either. Trophy icon; falls between Verdicts and
+Register.
+
+---
+
 ## [1.3.0] — 2026-08-25 (frontend reliability, onboarding, docs overhaul v2)
 
 **Contract:** unchanged from v1.2.0

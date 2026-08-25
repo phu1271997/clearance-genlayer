@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { makeClient, CONTRACT_ADDRESS, awaitTxFinalized } from '../lib/genlayer';
+import { decodeRevert, preflightSubmit } from '../lib/preflight';
 import { Work } from '../lib/types';
 import { useWallet } from '../context/WalletContext';
 import { PendingBanner } from '../components/PendingBanner';
@@ -87,10 +88,19 @@ export const SubmitClaim: React.FC = () => {
     setCreatedClaimId(null);
 
     try {
-      const client = makeClient(address);
-
       // 0.01 GEN = 10,000,000,000,000,000 wei (10^16)
       const depositValue = BigInt('10000000000000000');
+
+      // Preflight — surface "no GEN on studionet" before MetaMask pops so the
+      // user isn't told to sign an amount they cannot cover.
+      const warn = await preflightSubmit(address, depositValue, 'submit claim');
+      if (warn) {
+        setError(warn);
+        setIsSubmitting(false);
+        return;
+      }
+
+      const client = makeClient(address);
 
       const txHash = await client.writeContract({
         address: CONTRACT_ADDRESS as `0x${string}`,
@@ -126,7 +136,7 @@ export const SubmitClaim: React.FC = () => {
       }
     } catch (err: any) {
       console.error(err);
-      setError(err?.message || 'Failed to submit claim on-chain');
+      setError(decodeRevert(err));
     } finally {
       setIsSubmitting(false);
     }

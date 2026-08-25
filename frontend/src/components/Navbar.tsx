@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ConnectWallet } from './ConnectWallet';
-import { Music, PlusCircle, Disc, User, Sparkles, Award, Gavel, Menu, X } from 'lucide-react';
+import { Music, PlusCircle, Disc, User, Sparkles, Award, Gavel, Menu, X, Trophy } from 'lucide-react';
 
 const NAV_ITEMS: { to: string; label: string; icon: React.ReactNode; matchPrefix?: string }[] = [
-  { to: '/',           label: 'Overview',      icon: <Sparkles    className="w-3.5 h-3.5" /> },
-  { to: '/works',      label: 'All Works',     icon: <Disc        className="w-3.5 h-3.5" /> },
-  { to: '/verdicts',   label: 'Verdicts',      icon: <Gavel       className="w-3.5 h-3.5" /> },
-  { to: '/register',   label: 'Register Work', icon: <PlusCircle  className="w-3.5 h-3.5" /> },
-  { to: '/my-works',   label: 'My Portfolio',  icon: <User        className="w-3.5 h-3.5" /> },
-  { to: '/reputation', label: 'Reputation',    icon: <Award       className="w-3.5 h-3.5" />, matchPrefix: '/reputation' },
+  { to: '/',            label: 'Overview',      icon: <Sparkles    className="w-3.5 h-3.5" /> },
+  { to: '/works',       label: 'All Works',     icon: <Disc        className="w-3.5 h-3.5" /> },
+  { to: '/verdicts',    label: 'Verdicts',      icon: <Gavel       className="w-3.5 h-3.5" /> },
+  { to: '/leaderboard', label: 'Leaderboard',   icon: <Trophy      className="w-3.5 h-3.5" /> },
+  { to: '/register',    label: 'Register Work', icon: <PlusCircle  className="w-3.5 h-3.5" /> },
+  { to: '/my-works',    label: 'My Portfolio',  icon: <User        className="w-3.5 h-3.5" /> },
+  { to: '/reputation',  label: 'Reputation',    icon: <Award       className="w-3.5 h-3.5" />, matchPrefix: '/reputation' },
 ];
 
 export const Navbar: React.FC = () => {

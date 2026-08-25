@@ -28,3 +28,34 @@
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* Accessibility — visible focus ring on every keyboard-focusable element.
+   Mouse users get the default (removed via :focus:not(:focus-visible)). */
+:focus-visible {
+  outline: 2px solid #a855f7;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Skip-to-content link — hidden until it takes focus (Tab from URL bar). */
+.clearance-skip-link {
+  position: fixed;
+  top: -60px;
+  left: 12px;
+  z-index: 200;
+  padding: 8px 16px;
+  background: #7c3aed;
+  color: #fff;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  transition: top 0.15s ease;
+}
+.clearance-skip-link:focus,
+.clearance-skip-link:focus-visible {
+  top: 12px;
+  outline: 2px solid #22d3ee;
+}

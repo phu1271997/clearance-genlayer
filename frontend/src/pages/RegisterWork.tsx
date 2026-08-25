@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { makeClient, CONTRACT_ADDRESS, awaitTxFinalized } from '../lib/genlayer';
+import { decodeRevert, preflightSubmit } from '../lib/preflight';
 import { useWallet } from '../context/WalletContext';
 import { PendingBanner } from '../components/PendingBanner';
 import { PlusCircle, FileText, Globe, Music, AlertCircle, ArrowLeft, CheckCircle, Wand2 } from 'lucide-react';
@@ -51,8 +52,14 @@ export const RegisterWork: React.FC = () => {
     setCreatedId(null);
 
     try {
+      const warn = await preflightSubmit(address, BigInt(0), 'register work');
+      if (warn) {
+        setError(warn);
+        setIsSubmitting(false);
+        return;
+      }
       const client = makeClient(address);
-      
+
       const txHash = await client.writeContract({
         address: CONTRACT_ADDRESS as `0x${string}`,
         functionName: 'register_work',
@@ -91,7 +98,7 @@ export const RegisterWork: React.FC = () => {
       }
     } catch (err: any) {
       console.error(err);
-      setError(err?.message || 'Failed to register work on-chain');
+      setError(decodeRevert(err));
     } finally {
       setIsSubmitting(false);
     }
