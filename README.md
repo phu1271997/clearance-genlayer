@@ -4,17 +4,18 @@
 
 ![network](https://img.shields.io/badge/network-studionet-8b5cf6)
 ![contract](https://img.shields.io/badge/contract-v1.2.0-22d3ee)
-![frontend](https://img.shields.io/badge/frontend-v1.4.0-a78bfa)
+![frontend](https://img.shields.io/badge/frontend-v1.5.0-a78bfa)
 ![tests](https://img.shields.io/badge/tests-32%20passing-10b981)
 ![license](https://img.shields.io/badge/license-MIT-64748b)
 
-**Current frontend:** `v1.4.0` — leaderboard, preflight balance checks,
-friendly revert decoder, keyboard shortcuts. **Contract on-chain:** `v1.2.0`
+**Current frontend:** `v1.5.0` — protocol analytics dashboard, per-address
+history, social share, formal invariant spec.  **Contract on-chain:** `v1.2.0`
 (unchanged since 2026-08-16). See [`CHANGELOG.md`](CHANGELOG.md) and
 [`SECURITY.md`](SECURITY.md). Vietnamese translation: [`README.vi.md`](README.vi.md).
 Step-by-step onboarding: [`docs/ONBOARDING.md`](docs/ONBOARDING.md).
 Contract method reference: [`docs/API.md`](docs/API.md).
 Demo screenplay: [`docs/DEMO-SCRIPT.md`](docs/DEMO-SCRIPT.md).
+Protocol invariants: [`docs/PROTOCOL-INVARIANTS.md`](docs/PROTOCOL-INVARIANTS.md).
 
 ---
 
@@ -167,6 +168,7 @@ a custom semantic `validator_fn` inside `gl.vm.run_nondet`:
 - **Public verdict feed (no wallet needed):** https://clearance-genlayer.vercel.app/verdicts
 - **Filtered feed example:** https://clearance-genlayer.vercel.app/verdicts?status=REJECTED
 - **Client-side leaderboard:** https://clearance-genlayer.vercel.app/leaderboard
+- **Protocol stats dashboard:** https://clearance-genlayer.vercel.app/stats
 - **Evidence pages the jury reads:** https://clearance-genlayer.vercel.app/evidence/
 
 ---

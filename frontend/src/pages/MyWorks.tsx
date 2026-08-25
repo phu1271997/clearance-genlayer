@@ -23,19 +23,28 @@ export const MyWorks: React.FC = () => {
     setLoading(true);
     try {
       const client = makeClient();
-      const res = await client.readContract({
-        address: CONTRACT_ADDRESS as `0x${string}`,
-        functionName: 'list_works',
-        args: [],
-      }) as unknown as WorkSummary[];
-
-      if (Array.isArray(res)) {
-        const currentAddr = address;
-        const userWorks = res.filter(
-          (w) => w.artist && currentAddr && w.artist.toLowerCase() === currentAddr.toLowerCase()
+      // Use the artist-scoped view. The contract already filters, so we do
+      // not re-download the entire catalog just to throw most of it away.
+      // Fall back to list_works + client filter for older contract builds.
+      let res: WorkSummary[] = [];
+      try {
+        res = (await client.readContract({
+          address: CONTRACT_ADDRESS as `0x${string}`,
+          functionName: 'list_works_by_artist',
+          args: [address],
+        })) as unknown as WorkSummary[];
+      } catch (viewErr) {
+        console.warn('list_works_by_artist unavailable, falling back:', viewErr);
+        const all = (await client.readContract({
+          address: CONTRACT_ADDRESS as `0x${string}`,
+          functionName: 'list_works',
+          args: [],
+        })) as unknown as WorkSummary[];
+        res = (all || []).filter(
+          (w) => w.artist && w.artist.toLowerCase() === address.toLowerCase(),
         );
-        setWorks(userWorks);
       }
+      setWorks(Array.isArray(res) ? res : []);
     } catch (err) {
       console.error('Error loading my works:', err);
     } finally {

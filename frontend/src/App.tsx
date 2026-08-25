@@ -14,6 +14,7 @@ import { MyWorks } from './pages/MyWorks';
 import { Reputation } from './pages/Reputation';
 import { Verdicts } from './pages/Verdicts';
 import { Leaderboard } from './pages/Leaderboard';
+import { Stats } from './pages/Stats';
 
 export const App: React.FC = () => {
   return (
@@ -30,6 +31,7 @@ export const App: React.FC = () => {
               <Route path="/register" element={<RegisterWork />} />
               <Route path="/verdicts" element={<Verdicts />} />
               <Route path="/leaderboard" element={<Leaderboard />} />
+              <Route path="/stats" element={<Stats />} />
               <Route path="/works" element={<Works />} />
               <Route path="/works/:workId" element={<WorkDetail />} />
               <Route path="/claim/new/:workId" element={<SubmitClaim />} />

@@ -1,7 +1,12 @@
 import React from 'react';
 import { Claim } from '../lib/types';
-import { CheckCircle2, AlertTriangle, XCircle, Clock, AlertCircle, ExternalLink, ShieldCheck } from 'lucide-react';
+import {
+  CheckCircle2, AlertTriangle, XCircle, Clock, AlertCircle, ExternalLink,
+  ShieldCheck, Share2,
+} from 'lucide-react';
 import { EXPLORER_URL } from '../lib/genlayer';
+
+const LIVE_ORIGIN = 'https://clearance-genlayer.vercel.app';
 
 interface VerdictCardProps {
   claim: Claim;
@@ -52,6 +57,19 @@ export const VerdictCard: React.FC<VerdictCardProps> = ({ claim, txHash }) => {
   const style = getBadgeStyle(claim.status);
   const splitPct = (claim.final_split_bps / 100).toFixed(2);
   const proposedPct = (claim.proposed_split_bps / 100).toFixed(2);
+
+  // Pre-composed share URLs — the claim page URL is stable and public.
+  const claimUrl = `${LIVE_ORIGIN}/claim/${claim.id}`;
+  const shareText =
+    claim.status === 'PENDING'
+      ? `Claim #${claim.id} is pending an on-chain AI verdict on GenLayer Clearance.`
+      : `Claim #${claim.id} → ${claim.status} @ ${splitPct}% split, ${claim.ai_confidence}% confidence. Adjudicated on-chain by the GenLayer AI jury.`;
+  const twitterHref =
+    'https://twitter.com/intent/tweet?' +
+    new URLSearchParams({ text: shareText, url: claimUrl }).toString();
+  const farcasterHref =
+    'https://warpcast.com/~/compose?' +
+    new URLSearchParams({ text: `${shareText} ${claimUrl}` }).toString();
 
   return (
     <div className={`border rounded-2xl p-6 shadow-2xl backdrop-blur-xl ${style.bg} transition-all`}>
@@ -114,6 +132,35 @@ export const VerdictCard: React.FC<VerdictCardProps> = ({ claim, txHash }) => {
             {txHash.substring(0, 14)}...{txHash.substring(txHash.length - 6)}
             <ExternalLink className="w-3 h-3" />
           </a>
+        </div>
+      )}
+
+      {claim.status !== 'PENDING' && (
+        <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between gap-3 flex-wrap">
+          <div className="inline-flex items-center gap-1.5 text-[10px] uppercase font-bold tracking-wider text-slate-400">
+            <Share2 className="w-3.5 h-3.5" />
+            <span>Share this verdict</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <a
+              href={twitterHref}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="text-xs font-semibold px-3 py-1.5 rounded-full border border-slate-700 bg-slate-900/60 text-slate-100 hover:border-cyan-500/60 hover:text-cyan-300 transition-colors"
+              aria-label="Share on X"
+            >
+              Share on X
+            </a>
+            <a
+              href={farcasterHref}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="text-xs font-semibold px-3 py-1.5 rounded-full border border-slate-700 bg-slate-900/60 text-slate-100 hover:border-purple-500/60 hover:text-purple-300 transition-colors"
+              aria-label="Share on Farcaster"
+            >
+              Share on Farcaster
+            </a>
+          </div>
         </div>
       )}
     </div>

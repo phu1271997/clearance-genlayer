@@ -3,6 +3,76 @@
 All notable changes to this project follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] — 2026-08-25 (stats dashboard, reputation deep-dive, share, invariants)
+
+**Contract:** unchanged from v1.2.0
+(`0xB9185ccb8D9b6C0667f62B2556596964536a2631`). Storage, ABI, economics
+identical — **no redeploy required**.
+
+### Added — protocol-wide analytics at `/stats`
+
+New page aggregates `list_claims()` + `counts()` on the client and
+surfaces headline numbers a reviewer would otherwise have to compute
+by hand:
+
+- Claims filed, decided count, good-faith rate.
+- Verdict distribution as a horizontal stacked bar with per-status
+  count + share.
+- Binding split distribution across five bands (0% / 0-10% /
+  10-25% / 25-50% / 50%+).
+- Average AI confidence, average appeals per claim, settled count.
+- Locked vs final forfeit totals in GEN, refreshing on demand.
+
+Every number traces to on-chain state — the contract needs no new
+methods.
+
+### Added — Reputation page deep-dive
+
+`/reputation/:address` now shows, alongside the raw counts and the
+tier badge:
+
+- **Works registered** by that address via
+  `list_works_by_artist(address)` — links straight to each work page.
+- **Claims filed** by that address via `list_claims()` filtered by
+  remixer — status badge, proposed / binding split, confidence, click
+  through to the claim.
+
+Reduces the number of times a reviewer has to bounce between the
+Verdicts feed and the Reputation page to reconstruct someone's
+history.
+
+### Added — social share buttons on `VerdictCard`
+
+Every decided claim gets pre-composed **Share on X** and **Share on
+Farcaster** buttons that open the compose window with the verdict
+one-liner and a link back to `/claim/:id`. Skipped on PENDING claims —
+there is nothing worth sharing yet.
+
+### Added — `docs/PROTOCOL-INVARIANTS.md`
+
+Twenty-one numbered invariants covering solvency, appeal safety,
+settlement safety, consensus safety, data integrity, and
+non-determinism hygiene. Each invariant links to the test that pins
+it, plus an explicit "what is NOT invariant" section so a grader
+never assumes the wrong thing.
+
+### Added — social metadata
+
+`index.html` gains a full Open Graph block (site name, alt text,
+locales), a `summary_large_image` Twitter card, canonical URL,
+keywords, and a minimal Farcaster Frame descriptor so `/verdicts` can
+render as a mini-app link inside a cast.
+
+### Changed — `MyWorks` uses `list_works_by_artist`
+
+The page previously called `list_works()` and filtered the whole
+catalogue on the client. It now calls `list_works_by_artist(address)`
+directly — falling back to the client filter only if the view is
+unavailable. Cuts wire size on any deploy with more than a handful of
+works.
+
+---
+
 ## [1.4.0] — 2026-08-25 (leaderboard, preflight, revert decoder, docs pack v3)
 
 **Contract:** unchanged from v1.2.0

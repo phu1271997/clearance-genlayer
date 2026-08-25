@@ -2,8 +2,21 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { makeClient, CONTRACT_ADDRESS, EXPLORER_URL } from '../lib/genlayer';
 import { useWallet } from '../context/WalletContext';
-import { Reputation as ReputationT } from '../lib/types';
-import { Award, Search, ArrowLeft, RefreshCw, ExternalLink, User, TrendingUp, ShieldCheck, XCircle, AlertTriangle } from 'lucide-react';
+import { Reputation as ReputationT, ClaimSummary } from '../lib/types';
+import { CopyButton } from '../components/CopyButton';
+import {
+  Award, Search, ArrowLeft, RefreshCw, ExternalLink, User, TrendingUp,
+  ShieldCheck, XCircle, AlertTriangle, Music, Disc,
+} from 'lucide-react';
+
+interface WorkRow { id: string; artist: string; title: string; }
+
+const STATUS_STYLE: Record<string, string> = {
+  APPROVED: 'text-emerald-300 bg-emerald-950/60 border-emerald-500/40',
+  MODIFIED: 'text-amber-300 bg-amber-950/60 border-amber-500/40',
+  REJECTED: 'text-rose-300 bg-rose-950/60 border-rose-500/40',
+  PENDING:  'text-slate-300 bg-slate-800/60 border-slate-600/40',
+};
 
 // Reputation tiers derived from on-chain counters. Purely display —
 // contract exposes raw counts, tier logic lives here so it can evolve
@@ -26,6 +39,8 @@ export const Reputation: React.FC = () => {
   const targetAddr = (paramAddr || myAddr || '').toLowerCase();
   const [inputAddr, setInputAddr] = useState<string>(paramAddr || myAddr || '');
   const [rep, setRep] = useState<ReputationT | null>(null);
+  const [works, setWorks] = useState<WorkRow[]>([]);
+  const [claims, setClaims] = useState<ClaimSummary[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,15 +50,29 @@ export const Reputation: React.FC = () => {
     setError(null);
     try {
       const client = makeClient();
-      const r = await client.readContract({
-        address: CONTRACT_ADDRESS as `0x${string}`,
-        functionName: 'get_reputation',
-        args: [addr],
-      }) as unknown as ReputationT;
+      const call = (fn: string, args: any[] = []) =>
+        client.readContract({
+          address: CONTRACT_ADDRESS as `0x${string}`,
+          functionName: fn,
+          args,
+        });
+      const [r, w, feed] = await Promise.all([
+        call('get_reputation', [addr]) as unknown as Promise<ReputationT>,
+        call('list_works_by_artist', [addr]).catch(() => []) as unknown as Promise<WorkRow[]>,
+        call('list_claims').catch(() => []) as unknown as Promise<ClaimSummary[]>,
+      ]);
       setRep(r);
+      setWorks(Array.isArray(w) ? w : []);
+      // Only claims filed by this remixer, newest first (list_claims already newest first)
+      const mine = (Array.isArray(feed) ? feed : []).filter(
+        (c) => (c.remixer || '').toLowerCase() === addr.toLowerCase(),
+      );
+      setClaims(mine);
     } catch (err: any) {
       setError(err?.message || 'Failed to fetch reputation');
       setRep(null);
+      setWorks([]);
+      setClaims([]);
     } finally {
       setLoading(false);
     }
@@ -187,7 +216,91 @@ export const Reputation: React.FC = () => {
             <Link to="/works" className="text-purple-400 hover:text-purple-300">
               Browse works →
             </Link>
+            <CopyButton value={rep.address} label="copy" />
           </div>
+
+          {/* Works registered by this address (artist side) */}
+          <section aria-labelledby="works-heading" className="space-y-3">
+            <h2 id="works-heading" className="text-sm font-bold text-white flex items-center gap-2">
+              <Music className="w-4 h-4 text-purple-400" />
+              <span>Works registered ({works.length})</span>
+            </h2>
+            {works.length === 0 ? (
+              <p className="text-slate-500 text-xs italic">
+                This address has not registered any works.
+              </p>
+            ) : (
+              <div className="grid sm:grid-cols-2 gap-2">
+                {works.map((w) => (
+                  <Link
+                    key={w.id}
+                    to={`/works/${w.id}`}
+                    className="bg-[#121422] border border-slate-800 hover:border-purple-500/40 rounded-xl p-3 flex items-center justify-between gap-2 transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-mono text-slate-500">Work #{w.id}</div>
+                      <div className="text-sm font-semibold text-white truncate">{w.title}</div>
+                    </div>
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Claims filed by this address (remixer side) */}
+          <section aria-labelledby="claims-heading" className="space-y-3">
+            <h2 id="claims-heading" className="text-sm font-bold text-white flex items-center gap-2">
+              <Disc className="w-4 h-4 text-cyan-400" />
+              <span>Claims filed ({claims.length})</span>
+            </h2>
+            {claims.length === 0 ? (
+              <p className="text-slate-500 text-xs italic">
+                This address has not filed any remix claims yet.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {claims.slice(0, 20).map((c) => (
+                  <Link
+                    key={c.id}
+                    to={`/claim/${c.id}`}
+                    className="block bg-[#121422] border border-slate-800 hover:border-cyan-500/40 rounded-xl p-3 transition-colors"
+                  >
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${STATUS_STYLE[c.status] || STATUS_STYLE.PENDING}`}>
+                        {c.status}
+                      </span>
+                      <span className="font-mono text-xs text-slate-500">
+                        Claim #{c.id}
+                      </span>
+                      <span className="text-xs text-slate-400 ml-auto">
+                        on <strong className="text-slate-200">{c.work_title || `Work #${c.work_id}`}</strong>
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 mt-2 font-mono text-[11px]">
+                      <div>
+                        <span className="text-slate-500">Proposed: </span>
+                        <span className="text-slate-200">{(c.proposed_split_bps / 100).toFixed(1)}%</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">Binding: </span>
+                        <span className="text-cyan-300">{(c.final_split_bps / 100).toFixed(1)}%</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">Confidence: </span>
+                        <span className="text-purple-300">{c.ai_confidence}%</span>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+                {claims.length > 20 && (
+                  <p className="text-[11px] text-slate-500 text-center pt-1">
+                    Showing 20 most recent of {claims.length}.
+                  </p>
+                )}
+              </div>
+            )}
+          </section>
         </>
       )}
 
