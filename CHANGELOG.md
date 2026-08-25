@@ -3,6 +3,100 @@
 All notable changes to this project follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] — 2026-08-25 (frontend reliability, onboarding, docs overhaul v2)
+
+**Contract:** unchanged from v1.2.0
+(`0xB9185ccb8D9b6C0667f62B2556596964536a2631`). Storage layout, ABI and
+economics are identical — this release is entirely frontend, tests, sample
+data and documentation, so **no redeploy is required** and no address
+rotation is needed.
+
+### Fixed — appeal button reverted after every REJECTED verdict
+
+The frontend priced the appeal stake off `claim.deposit * multiplier`, but
+the contract has (since v1.2.0) priced it off the immutable
+`base_deposit`, because `_apply_verdict` zeroes `deposit` on REJECTED.
+`ClaimDetail.tsx` therefore submitted `value: 0` on the exact path the
+appeal exists for, and every attempt reverted with "insufficient appeal
+stake". Fixed by reading `claim.base_deposit` (falling back to `deposit`
+only if the older contract build did not expose the field) — the on-chain
+receipt now succeeds and the button label shows the real 0.02 GEN stake.
+
+### Added — searchable, filterable verdict feed with shareable URLs
+
+`/verdicts` gained a status filter (ALL / APPROVED / MODIFIED / REJECTED /
+PENDING with live counts) and a full-text search box over claim id, work
+title, remixer address, remix URL, and rationale. State lives in the URL
+so every filtered view is shareable:
+
+- `/verdicts?status=APPROVED`
+- `/verdicts?status=REJECTED&q=vodka`
+
+Empty-filter and empty-search states have their own copy so a reviewer
+never sees "no verdicts" when the feed is actually populated.
+
+### Added — first-visit onboarding modal
+
+A six-step modal explains the protocol (Welcome → Register → Claim →
+Adjudicate → Appeal → Ready) on the first visit and remembers the
+dismissal in `localStorage` under `clearance.onboarding.v1.dismissed`. Skip
+and Back links are always available; the modal is `aria-modal` with a
+labelled title, keyboard-focusable buttons, and closes on the backdrop.
+
+### Added — mobile navigation
+
+Through v1.2.0 the desktop nav was `hidden md:flex` and no mobile fallback
+existed, so anyone browsing on a phone had only the logo. v1.3.0 adds a
+hamburger sheet that reuses the same nav item list, closes on route
+change, and locks body scroll while open.
+
+### Added — copy-to-clipboard buttons for on-chain identifiers
+
+A shared `CopyButton` component sits next to every address and contract
+identifier the user might want to paste into MetaMask or an explorer.
+Falls back to the legacy `execCommand('copy')` path when the page is not
+served over HTTPS. Wired up in `Verdicts` (contract address) and
+`ClaimDetail` (artist and remixer addresses).
+
+### Added — sample data expansion
+
+`docs/samples/works.json` and `frontend/src/data/sampleWorks.ts` gain four
+new license presets (Education-only, Regional-lock, Livestream-cover, and
+kept Charity-only) and three additional claim presets against Neon Rain
+(APPROVED at 2s, MODIFIED where the remixer proposes 0% on an 8s band
+sample, and REJECTED for a 22s uncredited chorus lift). This exercises the
+"length band + attribution + prohibited context" combinations of the
+demo licence rather than a single scenario per verdict.
+
+### Added — `scripts/seed.mjs` also seeds claims
+
+`SEED_CLAIMS=0` opts out. When Neon Rain is present the script files the
+three shipped claim presets, so `/verdicts` is populated end-to-end from a
+single run instead of only registering works.
+
+### Added — Vietnamese README (`README.vi.md`)
+
+Full localisation, mirrors the English README section by section and
+links back to it at the top so a Vietnamese-speaking reviewer lands on
+material in their own language.
+
+### Added — `docs/ONBOARDING.md`
+
+Step-by-step guide covering the read-only path, MetaMask + studionet
+setup, funding from the Studio Accounts panel (not the testnet faucet),
+registering a work, filing a claim, adjudication timing, settlement, and
+appeal. Also documents the standard troubleshooting failure modes.
+
+### Added — `docs/adr/ADR-003-validator-semantics.md`
+
+Records what `validator_fn` compares (`verdict` exact, `final_split_bps`
+±5%, `confidence` ±20, canary refusal, leader-crash refusal), why the
+`gl.eq_principle.*` wrappers were considered and ruled out, and the
+consequence trade-offs. Cross-linked from the isolation tests in
+`test_clearance.py`.
+
+---
+
 ## [1.2.0] — 2026-08-16 (economics fix, runnable tests, live evidence)
 
 **Deployed on studionet:** [`0xB9185ccb8D9b6C0667f62B2556596964536a2631`](https://explorer-studio.genlayer.com/address/0xB9185ccb8D9b6C0667f62B2556596964536a2631)

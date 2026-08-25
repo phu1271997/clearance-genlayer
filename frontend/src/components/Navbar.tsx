@@ -1,12 +1,39 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ConnectWallet } from './ConnectWallet';
-import { Music, PlusCircle, Disc, User, Sparkles, Award, Gavel } from 'lucide-react';
+import { Music, PlusCircle, Disc, User, Sparkles, Award, Gavel, Menu, X } from 'lucide-react';
+
+const NAV_ITEMS: { to: string; label: string; icon: React.ReactNode; matchPrefix?: string }[] = [
+  { to: '/',           label: 'Overview',      icon: <Sparkles    className="w-3.5 h-3.5" /> },
+  { to: '/works',      label: 'All Works',     icon: <Disc        className="w-3.5 h-3.5" /> },
+  { to: '/verdicts',   label: 'Verdicts',      icon: <Gavel       className="w-3.5 h-3.5" /> },
+  { to: '/register',   label: 'Register Work', icon: <PlusCircle  className="w-3.5 h-3.5" /> },
+  { to: '/my-works',   label: 'My Portfolio',  icon: <User        className="w-3.5 h-3.5" /> },
+  { to: '/reputation', label: 'Reputation',    icon: <Award       className="w-3.5 h-3.5" />, matchPrefix: '/reputation' },
+];
 
 export const Navbar: React.FC = () => {
   const location = useLocation();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
-  const isActive = (path: string) => location.pathname === path;
+  const isActive = (item: { to: string; matchPrefix?: string }) =>
+    item.matchPrefix ? location.pathname.startsWith(item.matchPrefix) : location.pathname === item.to;
+
+  // Close the mobile sheet whenever the route changes.
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
+  // Lock body scroll while the sheet is open.
+  useEffect(() => {
+    if (mobileOpen) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = prev;
+      };
+    }
+  }, [mobileOpen]);
 
   return (
     <header className="sticky top-0 z-50 bg-[#090a0f]/80 backdrop-blur-xl border-b border-slate-800/80">
@@ -33,78 +60,62 @@ export const Navbar: React.FC = () => {
         </Link>
 
         <nav className="hidden md:flex items-center gap-1 bg-[#131522] border border-slate-800/80 rounded-2xl p-1">
-          <Link
-            to="/"
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              isActive('/')
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Overview</span>
-          </Link>
-          <Link
-            to="/works"
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              isActive('/works')
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-            }`}
-          >
-            <Disc className="w-3.5 h-3.5" />
-            <span>All Works</span>
-          </Link>
-          <Link
-            to="/verdicts"
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              isActive('/verdicts')
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-            }`}
-          >
-            <Gavel className="w-3.5 h-3.5" />
-            <span>Verdicts</span>
-          </Link>
-          <Link
-            to="/register"
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              isActive('/register')
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-            }`}
-          >
-            <PlusCircle className="w-3.5 h-3.5" />
-            <span>Register Work</span>
-          </Link>
-          <Link
-            to="/my-works"
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              isActive('/my-works')
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-            }`}
-          >
-            <User className="w-3.5 h-3.5" />
-            <span>My Portfolio</span>
-          </Link>
-          <Link
-            to="/reputation"
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              location.pathname.startsWith('/reputation')
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-            }`}
-          >
-            <Award className="w-3.5 h-3.5" />
-            <span>Reputation</span>
-          </Link>
+          {NAV_ITEMS.map((item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                isActive(item)
+                  ? 'bg-purple-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              }`}
+            >
+              {item.icon}
+              <span>{item.label}</span>
+            </Link>
+          ))}
         </nav>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <ConnectWallet />
+          <button
+            type="button"
+            className="md:hidden p-2 rounded-xl border border-slate-800 bg-[#131522] text-slate-200 hover:text-white transition-colors"
+            aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'}
+            aria-expanded={mobileOpen}
+            aria-controls="clearance-mobile-nav"
+            onClick={() => setMobileOpen((v) => !v)}
+          >
+            {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
         </div>
       </div>
+
+      {mobileOpen && (
+        <div
+          id="clearance-mobile-nav"
+          className="md:hidden border-t border-slate-800/80 bg-[#0b0c13]/95 backdrop-blur-xl"
+        >
+          <nav className="flex flex-col p-3 gap-1 max-w-7xl mx-auto">
+            {NAV_ITEMS.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                  isActive(item)
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                }`}
+              >
+                <span className="w-6 h-6 rounded-lg bg-slate-900/70 border border-slate-800 flex items-center justify-center">
+                  {item.icon}
+                </span>
+                <span>{item.label}</span>
+              </Link>
+            ))}
+          </nav>
+        </div>
+      )}
     </header>
   );
 };

@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { WalletProvider } from './context/WalletContext';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
+import { OnboardingModal } from './components/OnboardingModal';
 import { Home } from './pages/Home';
 import { RegisterWork } from './pages/RegisterWork';
 import { Works } from './pages/Works';
@@ -34,6 +35,7 @@ export const App: React.FC = () => {
             </Routes>
           </main>
           <Footer />
+          <OnboardingModal />
         </div>
       </Router>
     </WalletProvider>

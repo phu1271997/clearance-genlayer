@@ -51,6 +51,27 @@ export const SAMPLE_WORKS: SamplePreset[] = [
     license_terms:
       'Any sample length is allowed as long as the remix is released as a non-profit release with 100% of proceeds going to a registered charity. Otherwise a 40% royalty split applies. The remixer must state the beneficiary charity name in the track description.',
   },
+  {
+    id: 'sample.education-only',
+    title: 'Education-only',
+    source_url: 'https://clearance-genlayer.vercel.app/evidence/',
+    license_terms:
+      'Free sampling for educational content — tutorials, coursework, academic analysis. The remix description must state the educational context and link to the syllabus, lesson, or course. Commercial redistribution requires a 45% royalty split. No use in ads, sponsored placements, or fundraising campaigns.',
+  },
+  {
+    id: 'sample.regional-lock',
+    title: 'Regional-lock',
+    source_url: 'https://clearance-genlayer.vercel.app/evidence/',
+    license_terms:
+      'Sampling permitted in EU and Nordic regions only. The remix description must declare a primary release region. Distribution or streaming outside the EU/Nordics requires a separate written agreement. 20% royalty split applies within the permitted region. No use in political, religious or nationalist campaigns of any country.',
+  },
+  {
+    id: 'sample.livestream-cover',
+    title: 'Livestream-cover',
+    source_url: 'https://clearance-genlayer.vercel.app/evidence/',
+    license_terms:
+      'Livestream covers and VOD replays permitted with attribution and a 15% royalty split against monetized earnings. Uploaded audio releases (Spotify, Apple Music, Bandcamp) require a 35% split. Vocal covers acceptable; instrumental karaoke tracks require original stems purchase. No use as bed music for gambling streams.',
+  },
 ];
 
 /** Ready-made remix claims that pair with the `sample.neon-rain` work. */
@@ -94,5 +115,35 @@ export const SAMPLE_CLAIMS: SampleClaimPreset[] = [
       'Hold The Line is a 58-second cut for the Vodka Nord advertising campaign built on the sampled vocal hook from Neon Rain, roughly 22 seconds of the original in total. I propose a 40% royalty split.',
     proposed_split_bps: 4000,
     why: 'Two independent violations — vocal sampling is banned outright and alcohol advertising is a prohibited context. No split can cure it.',
+  },
+  {
+    id: 'claim.approved-attribution',
+    label: 'Fade Into Grey — 2s hi-hat clip, credited',
+    expects: 'APPROVED',
+    remix_url: 'https://clearance-genlayer.vercel.app/evidence/remix-approved.html',
+    declaration:
+      'Fade Into Grey uses a 2-second isolated hi-hat clip from Neon Rain (1:14-1:16). Percussion only, no melodic or vocal content. Full attribution to Mira Solvang and Neon Rain in the track title suffix and description. Independent bandcamp release, no advertising context.',
+    proposed_split_bps: 0,
+    why: 'Well below the 4-second free threshold, non-vocal, credited, non-commercial — every license predicate is comfortably satisfied at 0%.',
+  },
+  {
+    id: 'claim.modified-band',
+    label: 'Small Hours — 8s pad loop, no split declared',
+    expects: 'MODIFIED',
+    remix_url: 'https://clearance-genlayer.vercel.app/evidence/remix-modified.html',
+    declaration:
+      'Small Hours weaves an 8-second instrumental pad from Neon Rain (0:32-0:40) through the intro and outro. Instrumental only, no vocals. Mira Solvang is credited by name. I propose a 0% royalty split because the sample is short.',
+    proposed_split_bps: 0,
+    why: 'The sample sits in the 4-15s paid band, so the licence forces a 25% split — the jury should correct 0% upward rather than reject.',
+  },
+  {
+    id: 'claim.rejected-length',
+    label: 'Cascade — 22s uncredited chorus lift',
+    expects: 'REJECTED',
+    remix_url: 'https://clearance-genlayer.vercel.app/evidence/remix-rejected.html',
+    declaration:
+      'Cascade loops a 22-second chorus section from Neon Rain (0:44-1:06) verbatim, including the top-line vocal, released commercially on all major DSPs. No credit line in the description. I propose a 30% royalty split.',
+    proposed_split_bps: 3000,
+    why: 'Three violations: sample longer than 15s (requires separate agreement), vocal sampling (banned), and no attribution. Length alone is disqualifying.',
   },
 ];

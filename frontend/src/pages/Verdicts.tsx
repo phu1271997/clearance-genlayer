@@ -1,12 +1,13 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { makeClient, CONTRACT_ADDRESS, EXPLORER_URL, awaitTxFinalized } from '../lib/genlayer';
-import { ClaimSummary, Counts } from '../lib/types';
+import { ClaimSummary, ClaimStatus, Counts } from '../lib/types';
 import { useWallet } from '../context/WalletContext';
 import { WorkCardSkeleton } from '../components/Skeleton';
+import { CopyButton } from '../components/CopyButton';
 import {
   Gavel, RefreshCw, ExternalLink, AlertCircle, ShieldCheck,
-  CheckCircle2, Coins, Globe, Lock,
+  CheckCircle2, Coins, Globe, Lock, Search, Filter,
 } from 'lucide-react';
 
 const STATUS_STYLE: Record<string, string> = {
@@ -15,6 +16,9 @@ const STATUS_STYLE: Record<string, string> = {
   REJECTED: 'bg-rose-950/60 border-rose-500/40 text-rose-300',
   PENDING: 'bg-slate-800/60 border-slate-600/40 text-slate-300',
 };
+
+type StatusFilter = 'ALL' | ClaimStatus;
+const STATUS_FILTERS: StatusFilter[] = ['ALL', 'APPROVED', 'MODIFIED', 'REJECTED', 'PENDING'];
 
 /**
  * Public verdict feed. Deliberately wallet-free: a first-time visitor (or a
@@ -32,6 +36,28 @@ export const Verdicts: React.FC = () => {
   const [isSweeping, setIsSweeping] = useState(false);
   const [sweepMsg, setSweepMsg] = useState<string | null>(null);
   const [sweepErr, setSweepErr] = useState<string | null>(null);
+
+  // URL-driven filter + search — every filtered view is shareable by copying the
+  // address bar. On load, seed from ?status= and ?q=.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawStatus = (searchParams.get('status') || 'ALL').toUpperCase();
+  const statusFilter: StatusFilter = (STATUS_FILTERS as string[]).includes(rawStatus)
+    ? (rawStatus as StatusFilter)
+    : 'ALL';
+  const searchQuery = (searchParams.get('q') || '').trim();
+
+  const setStatus = (s: StatusFilter) => {
+    const next = new URLSearchParams(searchParams);
+    if (s === 'ALL') next.delete('status');
+    else next.set('status', s);
+    setSearchParams(next, { replace: true });
+  };
+  const setQuery = (q: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (!q) next.delete('q');
+    else next.set('q', q);
+    setSearchParams(next, { replace: true });
+  };
 
   /**
    * Rebuild the feed one claim at a time.
@@ -133,6 +159,30 @@ export const Verdicts: React.FC = () => {
 
   const decided = (claims ?? []).filter((c) => c.status !== 'PENDING');
 
+  const filteredClaims = useMemo(() => {
+    const list = claims ?? [];
+    const q = searchQuery.toLowerCase();
+    return list.filter((c) => {
+      if (statusFilter !== 'ALL' && c.status !== statusFilter) return false;
+      if (!q) return true;
+      const haystack = [
+        c.id, c.work_id, c.work_title, c.remixer, c.remix_url, c.reason,
+      ].join(' ').toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [claims, statusFilter, searchQuery]);
+
+  const statusCount = useMemo(() => {
+    const base: Record<StatusFilter, number> = {
+      ALL: 0, APPROVED: 0, MODIFIED: 0, REJECTED: 0, PENDING: 0,
+    };
+    for (const c of claims ?? []) {
+      base.ALL += 1;
+      base[c.status as StatusFilter] = (base[c.status as StatusFilter] || 0) + 1;
+    }
+    return base;
+  }, [claims]);
+
   return (
     <div className="max-w-5xl mx-auto py-6 space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -229,6 +279,57 @@ export const Verdicts: React.FC = () => {
         </div>
       )}
 
+      {/* Filter + search bar — URL-driven so /verdicts?status=REJECTED&q=vodka is shareable */}
+      {claims && claims.length > 0 && (
+        <div className="bg-[#0e101a] border border-slate-800 rounded-2xl p-4 space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Filter className="w-4 h-4 text-slate-500 shrink-0" />
+            {STATUS_FILTERS.map((s) => (
+              <button
+                key={s}
+                type="button"
+                aria-pressed={statusFilter === s}
+                onClick={() => setStatus(s)}
+                className={`text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border transition-colors ${
+                  statusFilter === s
+                    ? 'bg-purple-600 border-purple-500 text-white shadow-sm'
+                    : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {s}
+                <span className="ml-1.5 text-[10px] opacity-70 font-mono">
+                  {statusCount[s] ?? 0}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search claim id, work title, remixer, remix URL, or rationale…"
+              className="w-full bg-[#0b0c13] border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-slate-100 text-sm focus:outline-none focus:border-purple-500 transition-colors"
+              aria-label="Search verdicts"
+            />
+          </div>
+          {(statusFilter !== 'ALL' || searchQuery) && (
+            <div className="flex items-center gap-2 text-[11px] text-slate-500">
+              <span>
+                {filteredClaims.length} of {claims.length} claim{claims.length === 1 ? '' : 's'} match.
+              </span>
+              <button
+                onClick={() => { setStatus('ALL'); setQuery(''); }}
+                className="text-cyan-400 hover:text-cyan-300 underline"
+              >
+                Clear
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Feed */}
       {claims === null && !loadError ? (
         <div className="space-y-4"><WorkCardSkeleton /><WorkCardSkeleton /><WorkCardSkeleton /></div>
@@ -246,9 +347,23 @@ export const Verdicts: React.FC = () => {
             Browse the catalog
           </Link>
         </div>
+      ) : filteredClaims.length === 0 ? (
+        <div className="bg-[#121422] border border-slate-800 rounded-2xl p-10 text-center space-y-2">
+          <Search className="w-8 h-8 text-slate-600 mx-auto" />
+          <h2 className="text-base font-bold text-white">No verdicts match this filter</h2>
+          <p className="text-slate-400 text-xs">
+            Try a broader status or clear the search query.
+          </p>
+          <button
+            onClick={() => { setStatus('ALL'); setQuery(''); }}
+            className="text-cyan-400 hover:text-cyan-300 text-xs underline"
+          >
+            Reset filters
+          </button>
+        </div>
       ) : (
         <div className="space-y-4">
-          {claims!.map((c) => (
+          {filteredClaims.map((c) => (
             <Link
               key={c.id}
               to={`/claim/${c.id}`}
@@ -316,8 +431,8 @@ export const Verdicts: React.FC = () => {
       )}
 
       {CONTRACT_ADDRESS && (
-        <p className="text-[11px] text-slate-500 text-center">
-          Reading contract{' '}
+        <p className="text-[11px] text-slate-500 text-center flex items-center justify-center gap-1.5 flex-wrap">
+          <span>Reading contract</span>
           <a
             href={`${EXPLORER_URL}/address/${CONTRACT_ADDRESS}`}
             target="_blank"
@@ -325,8 +440,9 @@ export const Verdicts: React.FC = () => {
             className="font-mono text-cyan-500 hover:underline"
           >
             {CONTRACT_ADDRESS}
-          </a>{' '}
-          on studionet.
+          </a>
+          <CopyButton value={CONTRACT_ADDRESS} label="copy" />
+          <span>on studionet.</span>
         </p>
       )}
     </div>

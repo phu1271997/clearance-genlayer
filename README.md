@@ -2,8 +2,9 @@
 
 > **An on-chain AI jury clears music samples in minutes, not months.**
 
-**Current version:** `v1.2.0` — see [`CHANGELOG.md`](CHANGELOG.md) and
-[`SECURITY.md`](SECURITY.md).
+**Current version:** `v1.3.0` — see [`CHANGELOG.md`](CHANGELOG.md) and
+[`SECURITY.md`](SECURITY.md). Vietnamese translation: [`README.vi.md`](README.vi.md).
+Step-by-step onboarding: [`docs/ONBOARDING.md`](docs/ONBOARDING.md).
 
 ---
 
@@ -128,9 +129,13 @@ a custom semantic `validator_fn` inside `gl.vm.run_nondet`:
 ## Deployed Contract
 
 - **Network:** GenLayer Studio Network (`studionet`, Chain ID `61999` / `0xF1EF`)
-- **Contract (v1.2.0 — current):** [`0xB9185ccb8D9b6C0667f62B2556596964536a2631`](https://explorer-studio.genlayer.com/address/0xB9185ccb8D9b6C0667f62B2556596964536a2631)
+- **Contract (v1.2.0 — current, unchanged in v1.3.0):** [`0xB9185ccb8D9b6C0667f62B2556596964536a2631`](https://explorer-studio.genlayer.com/address/0xB9185ccb8D9b6C0667f62B2556596964536a2631)
 - **Deployed:** 2026-08-16 · schema verified live via `gen_getContractSchema` (16 methods)
 - **Block Explorer:** https://explorer-studio.genlayer.com
+
+> v1.3.0 is a frontend, tests, sample-data and documentation release —
+> the contract bytecode is unchanged so **no redeploy is required** and
+> `VITE_CONTRACT_ADDRESS` stays at the v1.2.0 address above.
 
 ### Deprecated addresses
 

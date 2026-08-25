@@ -5,6 +5,7 @@ import { Claim, Work } from '../lib/types';
 import { useWallet } from '../context/WalletContext';
 import { VerdictCard } from '../components/VerdictCard';
 import { PendingBanner } from '../components/PendingBanner';
+import { CopyButton } from '../components/CopyButton';
 import { Cpu, Scale, Coins, ArrowLeft, RefreshCw, ExternalLink, Globe, FileText, CheckCircle2, AlertCircle, ShieldAlert, Gavel } from 'lucide-react';
 
 const SETTLEMENT_MIN_GEN_FALLBACK = 0.1;
@@ -213,7 +214,15 @@ export const ClaimDetail: React.FC = () => {
     setPendingTxHash(undefined);
 
     try {
-      const stakeWei = BigInt(claim.deposit) * BigInt(appealMultiplier);
+      // v1.3.0 — price stake off the immutable base_deposit, mirroring the
+      // contract-side fix in v1.2.0. `claim.deposit` is 0 after REJECTED so
+      // pricing off it made every post-rejection appeal revert with
+      // "insufficient appeal stake". Fall back to deposit only if the older
+      // contract build did not expose base_deposit.
+      const reference = claim.base_deposit
+        ? BigInt(claim.base_deposit)
+        : BigInt(claim.deposit);
+      const stakeWei = reference * BigInt(appealMultiplier);
       const client = makeClient(address);
       const txHash = await client.writeContract({
         address: CONTRACT_ADDRESS as `0x${string}`,
@@ -328,7 +337,10 @@ export const ClaimDetail: React.FC = () => {
                 <div className="font-bold text-white text-base">{work.title}</div>
               </div>
               <div>
-                <div className="text-[10px] uppercase font-semibold text-slate-500">Artist Address</div>
+                <div className="text-[10px] uppercase font-semibold text-slate-500 flex items-center gap-2">
+                  <span>Artist Address</span>
+                  <CopyButton value={work.artist} />
+                </div>
                 <div className="font-mono text-xs text-slate-300 truncate">{work.artist}</div>
               </div>
               <div>
@@ -364,7 +376,10 @@ export const ClaimDetail: React.FC = () => {
 
           <div className="space-y-3 text-sm">
             <div>
-              <div className="text-[10px] uppercase font-semibold text-slate-500">Remixer Address</div>
+              <div className="text-[10px] uppercase font-semibold text-slate-500 flex items-center gap-2">
+                <span>Remixer Address</span>
+                <CopyButton value={claim.remixer} />
+              </div>
               <div className="font-mono text-xs text-slate-300 truncate">{claim.remixer}</div>
             </div>
             <div>
@@ -518,30 +533,40 @@ export const ClaimDetail: React.FC = () => {
               <Gavel className="w-4 h-4" />
               <span>Appeal this verdict</span>
             </div>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              You (the remixer) may re-stake <strong>{appealMultiplier}×</strong> the original deposit
-              ({(Number(claim.deposit) * appealMultiplier / 1e18).toFixed(4)} GEN) to force one
-              re-adjudication round. Capped at {maxAppeals} appeals per claim.
-              Appeals used: <strong>{(claim as any).appeals ?? 0} / {maxAppeals}</strong>.
-            </p>
-            <button
-              onClick={handleAppeal}
-              disabled={isAppealing || !isRemixer || ((claim as any).appeals ?? 0) >= maxAppeals}
-              title={!isRemixer ? 'Only the remixer may appeal' : ''}
-              className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 px-6 rounded-xl text-sm transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {isAppealing ? (
+            {(() => {
+              const referenceWei = claim.base_deposit
+                ? Number(BigInt(claim.base_deposit))
+                : Number(BigInt(claim.deposit));
+              const stakeGen = (referenceWei * appealMultiplier) / 1e18;
+              return (
                 <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>AI Jury Re-adjudicating...</span>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    You (the remixer) may re-stake <strong>{appealMultiplier}×</strong> the original
+                    deposit ({stakeGen.toFixed(4)} GEN) to force one re-adjudication round. Capped at{' '}
+                    {maxAppeals} appeals per claim. Appeals used:{' '}
+                    <strong>{(claim as any).appeals ?? 0} / {maxAppeals}</strong>.
+                  </p>
+                  <button
+                    onClick={handleAppeal}
+                    disabled={isAppealing || !isRemixer || ((claim as any).appeals ?? 0) >= maxAppeals}
+                    title={!isRemixer ? 'Only the remixer may appeal' : ''}
+                    className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 px-6 rounded-xl text-sm transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {isAppealing ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>AI Jury Re-adjudicating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Gavel className="w-4 h-4" />
+                        <span>Appeal ({stakeGen.toFixed(4)} GEN stake)</span>
+                      </>
+                    )}
+                  </button>
                 </>
-              ) : (
-                <>
-                  <Gavel className="w-4 h-4" />
-                  <span>Appeal ({(Number(claim.deposit) * appealMultiplier / 1e18).toFixed(4)} GEN stake)</span>
-                </>
-              )}
-            </button>
+              );
+            })()}
           </div>
         )}
 

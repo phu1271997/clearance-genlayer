@@ -26,6 +26,24 @@
       "title": "Charity-only",
       "source_url": "https://clearance-genlayer.vercel.app/evidence/",
       "license_terms": "Any sample length is allowed as long as the remix is released as a non-profit release with 100% of proceeds going to a registered charity. Otherwise a 40% royalty split applies. The remixer must state the beneficiary charity name in the track description."
+    },
+    {
+      "id": "sample.education-only",
+      "title": "Education-only",
+      "source_url": "https://clearance-genlayer.vercel.app/evidence/",
+      "license_terms": "Free sampling for educational content — tutorials, coursework, academic analysis. The remix description must state the educational context and link to the syllabus, lesson, or course. Commercial redistribution requires a 45% royalty split. No use in ads, sponsored placements, or fundraising campaigns."
+    },
+    {
+      "id": "sample.regional-lock",
+      "title": "Regional-lock",
+      "source_url": "https://clearance-genlayer.vercel.app/evidence/",
+      "license_terms": "Sampling permitted in EU and Nordic regions only. The remix description must declare a primary release region. Distribution or streaming outside the EU/Nordics requires a separate written agreement. 20% royalty split applies within the permitted region. No use in political, religious or nationalist campaigns of any country."
+    },
+    {
+      "id": "sample.livestream-cover",
+      "title": "Livestream-cover",
+      "source_url": "https://clearance-genlayer.vercel.app/evidence/",
+      "license_terms": "Livestream covers and VOD replays permitted with attribution and a 15% royalty split against monetized earnings. Uploaded audio releases (Spotify, Apple Music, Bandcamp) require a 35% split. Vocal covers acceptable; instrumental karaoke tracks require original stems purchase. No use as bed music for gambling streams."
     }
   ]
 }
