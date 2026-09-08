@@ -1,8 +1,16 @@
 # Deploying Clearance to GenLayer studionet
 
-`contracts/clearance.py` is deployed by hand through GenLayer Studio. There is
-no CI deploy step: Studio signs with the browser wallet, and this repo
-deliberately keeps no private key anywhere.
+`contracts/clearance.py` can be deployed either by hand through GenLayer
+Studio (below) or unattended with [`deploy.mjs`](deploy.mjs), which reads the
+deployer key from the central keystore and prints the new address + schema:
+
+```bash
+source ~/.genlayer/env.sh                 # exports GENLAYER_PRIVATE_KEY
+cd frontend && node ../scripts/deploy.mjs # run where genlayer-js resolves
+```
+
+The v2.0.0 deploy used exactly that. The manual Studio path is kept for anyone
+without the keystore.
 
 ---
 
@@ -38,8 +46,9 @@ curl -s -X POST https://studio.genlayer.com/api \
   -d '{"jsonrpc":"2.0","id":1,"method":"gen_getContractSchema","params":["0xYOUR_ADDRESS"]}'
 ```
 
-Expect a JSON object listing the methods. v1.2.0 exposes **16**, including
-`list_claims` and `get_owner` — if those two are missing you deployed an older
+Expect a JSON object listing the methods. v2.0.0 exposes **19**, including
+`contest`, `withdraw_contest_refund` and `get_precedents` — if those are
+missing you deployed an older
 file. An error instead of a schema means the contract is not there.
 
 Studio occasionally resets its storage, which silently kills a previously
@@ -68,7 +77,7 @@ vercel --prod
 Then confirm the live site picked it up, rather than trusting the build log:
 
 ```bash
-curl -s https://clearance-genlayer.vercel.app/verdicts | grep -c 'id="root"'
+curl -s https://clearance-genlayer-red.vercel.app/verdicts | grep -c 'id="root"'
 ```
 
 and open `/verdicts` in a private window — the feed must render without a

@@ -9,7 +9,7 @@ line is what the presenter says while the screen shows the paired action.
 
 - Studionet MetaMask account with **at least 1.5 GEN**.
 - `frontend/` running against
-  `VITE_CONTRACT_ADDRESS=0xB9185ccb8D9b6C0667f62B2556596964536a2631`.
+  `VITE_CONTRACT_ADDRESS=0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00`.
 - One work already registered (Neon Rain), one APPROVED claim already
   settled — so `/verdicts` is not empty on frame one. Run
   `node scripts/seed.mjs` if needed.
@@ -46,7 +46,7 @@ by this website — and every verdict is public. No wallet, no login."
 ## 0:40 – 1:00 — The evidence pages
 
 **Screen:** open a new tab to
-`https://clearance-genlayer.vercel.app/evidence/remix-rejected.html`.
+`https://clearance-genlayer-red.vercel.app/evidence/remix-rejected.html`.
 **Say:** "The jury is not guessing. When it adjudicates, it calls
 `gl.nondet.web.render` on the URLs the artist and the remixer supplied.
 Here is the real page it reads for the rejected claim — a vocal hook

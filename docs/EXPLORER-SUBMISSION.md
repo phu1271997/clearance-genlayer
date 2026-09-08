@@ -203,7 +203,7 @@ and stake 0.02 GEN to force a second hearing, capped at two.
 | Address | `0xB9185ccb8D9b6C0667f62B2556596964536a2631` |
 | Network | studionet |
 | **Status** | **Preview** — studionet is Studio-hosted. Writing "Live" would be a misrepresentation, and it is the first thing a reviewer checks |
-| Website | https://clearance-genlayer.vercel.app |
+| Website | https://clearance-genlayer-red.vercel.app |
 | GitHub | https://github.com/phu1271997/clearance-genlayer |
 | Community links | none — leave blank, they are optional |
 

@@ -634,6 +634,229 @@ def test_missing_records_report_not_found(direct_vm, court):
         court.get_claim("42")
 
 
+# --- 8. Two-sided disputes: artist contest (v2.0.0) ---------------------------
+
+CONTEST_STAKE = CLAIM_DEPOSIT_MIN * 2   # base_deposit * CONTEST_STAKE_MULTIPLIER
+
+
+def _cleared_claim(vm, court, artist, remixer, verdict="APPROVED", split_bps=0):
+    """Register a work and drive one claim to an APPROVED/MODIFIED verdict."""
+    _register(vm, court, artist)
+    _submit(vm, court, remixer, proposed_split_bps=split_bps,
+            declaration="Short instrumental loop, credited in the description.")
+    _arm_jury(vm, verdict, split_bps, reason="round 1 clearance")
+    vm.value = 0
+    with vm.prank(artist):
+        court.adjudicate("0")
+    return "0"
+
+
+def test_contest_config_is_published_on_chain(direct_vm, court):
+    cfg = court.get_config()
+    assert cfg["contest_stake_multiplier"] == 2
+    assert cfg["max_contests"] == 1
+    assert cfg["precedent_lookback"] == 3
+
+
+def test_artist_wins_a_contest_and_the_split_is_raised(direct_vm, court, artist, remixer):
+    """The rights holder challenges a too-low split and the jury raises it.
+    A won contest returns the stake (pull) and applies the new verdict."""
+    claim_id = _cleared_claim(direct_vm, court, artist, remixer, "APPROVED", split_bps=0)
+    assert court.get_claim(claim_id)["final_split_bps"] == 0
+
+    _arm_jury(direct_vm, "MODIFIED", 2500, confidence=90,
+              reason="On the artist's objection the 12s loop needs the 25% band.")
+    direct_vm.value = CONTEST_STAKE
+    with direct_vm.prank(artist):
+        court.contest(claim_id, "This is a 12 second loop, not 3 — the free tier does not apply.")
+
+    c = court.get_claim(claim_id)
+    assert c["status"] == "MODIFIED"
+    assert c["final_split_bps"] == 2500          # raised in the artist's favour
+    assert c["contests"] == 1
+    assert c["contest_outcome"] == "ARTIST_WON"
+    assert int(c["artist_refund"]) == CONTEST_STAKE   # stake returned, pull-payment
+
+
+def test_artist_wins_a_contest_that_flips_approved_to_rejected(direct_vm, court, artist, remixer):
+    claim_id = _cleared_claim(direct_vm, court, artist, remixer, "APPROVED", split_bps=0)
+
+    _arm_jury(direct_vm, "REJECTED", 0, confidence=95,
+              reason="Artist shows the sample is a vocal hook, which the terms forbid.")
+    direct_vm.value = CONTEST_STAKE
+    with direct_vm.prank(artist):
+        court.contest(claim_id, "That is my lead vocal, not an instrumental — vocals are barred.")
+
+    c = court.get_claim(claim_id)
+    assert c["status"] == "REJECTED"
+    assert c["contest_outcome"] == "ARTIST_WON"
+    assert int(c["artist_refund"]) == CONTEST_STAKE
+    # Flipping to REJECTED forfeits the remixer's live escrow.
+    assert int(c["deposit"]) == 0
+    assert int(court.counts()["forfeited_pool"]) == CLAIM_DEPOSIT_MIN
+
+
+def test_artist_loses_a_contest_and_forfeits_the_stake_to_the_remixer(direct_vm, court, artist, remixer):
+    """A challenge the evidence does not support leaves the clearance intact and
+    hands the stake to the remixer — the anti-griefing price of a bad contest."""
+    claim_id = _cleared_claim(direct_vm, court, artist, remixer, "APPROVED", split_bps=0)
+    deposit_before = int(court.get_claim(claim_id)["deposit"])
+
+    _arm_jury(direct_vm, "APPROVED", 0, confidence=90, reason="Evidence still supports the clearance.")
+    direct_vm.value = CONTEST_STAKE
+    with direct_vm.prank(artist):
+        court.contest(claim_id, "I simply disagree with this outcome and want more money.")
+
+    c = court.get_claim(claim_id)
+    assert c["status"] == "APPROVED"                      # clearance stands
+    assert c["contest_outcome"] == "REMIXER_WON"
+    assert int(c["artist_refund"]) == 0                   # artist gets nothing back
+    assert int(c["deposit"]) == deposit_before + CONTEST_STAKE   # stake compensates the remixer
+
+
+def test_only_the_artist_may_contest(direct_vm, court, artist, remixer, direct_charlie):
+    claim_id = _cleared_claim(direct_vm, court, artist, remixer, "APPROVED", split_bps=0)
+    _arm_jury(direct_vm, "REJECTED", 0, reason="would flip")
+    for outsider in (remixer, direct_charlie):
+        direct_vm.value = CONTEST_STAKE
+        with direct_vm.prank(outsider), direct_vm.expect_revert("only the work's original artist"):
+            court.contest(claim_id, "Trying to contest as the wrong party.")
+
+
+def test_contest_requires_the_full_stake(direct_vm, court, artist, remixer):
+    claim_id = _cleared_claim(direct_vm, court, artist, remixer, "APPROVED", split_bps=0)
+    _arm_jury(direct_vm, "REJECTED", 0, reason="would flip")
+    for underpay in (0, CONTEST_STAKE - 1):
+        direct_vm.value = underpay
+        with direct_vm.prank(artist), direct_vm.expect_revert("insufficient contest stake"):
+            court.contest(claim_id, "A properly worded objection about the split.")
+    assert court.get_claim(claim_id)["contests"] == 0
+
+
+def test_contest_is_capped_per_claim(direct_vm, court, artist, remixer):
+    claim_id = _cleared_claim(direct_vm, court, artist, remixer, "APPROVED", split_bps=0)
+
+    # First contest fails (verdict unchanged) but consumes the single allowance.
+    _arm_jury(direct_vm, "APPROVED", 0, reason="unchanged")
+    direct_vm.value = CONTEST_STAKE
+    with direct_vm.prank(artist):
+        court.contest(claim_id, "First objection, which the jury does not accept.")
+    assert court.get_claim(claim_id)["contests"] == 1
+
+    _arm_jury(direct_vm, "REJECTED", 0, reason="would flip")
+    direct_vm.value = CONTEST_STAKE
+    with direct_vm.prank(artist), direct_vm.expect_revert("contest limit reached"):
+        court.contest(claim_id, "Second objection should be barred by the cap.")
+
+
+def test_only_cleared_claims_may_be_contested(direct_vm, court, artist, remixer):
+    _register(direct_vm, court, artist)
+    _submit(direct_vm, court, remixer, proposed_split_bps=0)   # PENDING
+    direct_vm.value = CONTEST_STAKE
+    with direct_vm.prank(artist), direct_vm.expect_revert("only a cleared claim"):
+        court.contest("0", "Cannot contest a claim that has not been adjudicated yet.")
+
+
+def test_contest_cannot_run_after_settlement(direct_vm, court, artist, remixer):
+    claim_id = _cleared_claim(direct_vm, court, artist, remixer, "APPROVED", split_bps=2000)
+    direct_vm.value = SETTLEMENT_MIN * 10
+    with direct_vm.prank(remixer):
+        court.distribute(claim_id)
+    _arm_jury(direct_vm, "REJECTED", 0, reason="too late")
+    direct_vm.value = CONTEST_STAKE
+    with direct_vm.prank(artist), direct_vm.expect_revert("already distributed"):
+        court.contest(claim_id, "Trying to contest after the money already moved.")
+
+
+def test_artist_withdraws_a_won_contest_stake(direct_vm, court, artist, remixer, direct_charlie):
+    claim_id = _cleared_claim(direct_vm, court, artist, remixer, "APPROVED", split_bps=0)
+    _arm_jury(direct_vm, "REJECTED", 0, reason="flip to rejected")
+    direct_vm.value = CONTEST_STAKE
+    with direct_vm.prank(artist):
+        court.contest(claim_id, "Vocal sample, which is prohibited by the terms.")
+    assert int(court.get_claim(claim_id)["artist_refund"]) == CONTEST_STAKE
+
+    # Not the artist -> refused.
+    direct_vm.value = 0
+    with direct_vm.prank(direct_charlie), direct_vm.expect_revert("only the work's original artist"):
+        court.withdraw_contest_refund(claim_id)
+
+    direct_vm.value = 0
+    with direct_vm.prank(artist):
+        court.withdraw_contest_refund(claim_id)
+    assert int(court.get_claim(claim_id)["artist_refund"]) == 0
+
+    # Second withdraw has nothing left.
+    with direct_vm.prank(artist), direct_vm.expect_revert("nothing to withdraw"):
+        court.withdraw_contest_refund(claim_id)
+
+
+# --- 9. Precedent-aware jury (v2.0.0) -----------------------------------------
+
+def test_get_precedents_returns_decided_history_for_a_work(direct_vm, court, artist, remixer):
+    _register(direct_vm, court, artist)
+    assert court.get_precedents("0") == []       # nothing decided yet
+
+    for i, verdict in enumerate(["APPROVED", "REJECTED"]):
+        _submit(direct_vm, court, remixer,
+                remix_url=f"https://example.com/r{i}",
+                declaration=f"Loop number {i}, credited.")
+        _arm_jury(direct_vm, verdict, 0)
+        direct_vm.value = 0
+        with direct_vm.prank(artist):
+            court.adjudicate(str(i))
+
+    prec = court.get_precedents("0")
+    assert [p["id"] for p in prec] == ["1", "0"]           # newest first
+    assert {p["status"] for p in prec} == {"APPROVED", "REJECTED"}
+
+
+def test_prior_rulings_are_injected_into_the_jury_prompt(direct_vm, court, artist, remixer):
+    """The second claim on a work must see the first claim's ruling as
+    precedent. We prove it by only mocking an LLM answer for a prompt that
+    actually contains the precedent line — if the block were missing, the
+    mock would not match and adjudication would not settle."""
+    _register(direct_vm, court, artist)
+
+    # Claim 0 -> REJECTED, becomes precedent.
+    _submit(direct_vm, court, remixer, remix_url="https://example.com/r0",
+            declaration="First loop, credited.")
+    _arm_jury(direct_vm, "REJECTED", 0, reason="round one rejection on this work")
+    direct_vm.value = 0
+    with direct_vm.prank(artist):
+        court.adjudicate("0")
+
+    # Claim 1 -> only answer when the prompt carries claim #0's precedent line.
+    _submit(direct_vm, court, remixer, remix_url="https://example.com/r1",
+            declaration="Second loop, credited.")
+    direct_vm.clear_mocks()
+    direct_vm.mock_web(r".*", {"status": 200, "body": "Mock track page."})
+    direct_vm.mock_llm(r"Claim #0: REJECTED",
+                       _verdict("REJECTED", 0, 90, "Following the prior REJECTED ruling on this work."))
+    direct_vm.value = 0
+    with direct_vm.prank(artist):
+        court.adjudicate("1")
+
+    assert court.get_claim("1")["status"] == "REJECTED"    # mock only fired because precedent was present
+
+
+def test_contest_argument_is_injected_into_the_jury_prompt(direct_vm, court, artist, remixer):
+    """A contest must put the artist's objection in front of the jury. Same
+    technique: only answer a prompt that contains the RIGHTS-HOLDER DISPUTE
+    section."""
+    claim_id = _cleared_claim(direct_vm, court, artist, remixer, "APPROVED", split_bps=0)
+
+    direct_vm.clear_mocks()
+    direct_vm.mock_web(r".*", {"status": 200, "body": "Mock track page."})
+    direct_vm.mock_llm(r"RIGHTS-HOLDER DISPUTE",
+                       _verdict("REJECTED", 0, 92, "The artist's objection is borne out by the terms."))
+    direct_vm.value = CONTEST_STAKE
+    with direct_vm.prank(artist):
+        court.contest(claim_id, "This clearance ignored my no-advertising clause entirely.")
+
+    assert court.get_claim(claim_id)["status"] == "REJECTED"   # mock only fired on the dispute-aware prompt
+
+
 # --- helpers ------------------------------------------------------------------
 
 def _hex(address) -> str:

@@ -3,6 +3,84 @@
 All notable changes to this project follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] — 2026-09-08 (two-sided disputes + precedent-aware jury)
+
+**Contract:** **redeployed** — this is a storage- and ABI-changing release.
+New address `0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00` on studionet
+(19 methods; verified live via `gen_getContractSchema`). The v1.2.0 address
+`0xB9185ccb8D9b6C0667f62B2556596964536a2631` is deprecated.
+`VITE_CONTRACT_ADDRESS` rotated locally and on Vercel, and confirmed in the
+shipped bundle.
+
+Until v2.0.0 the protocol was one-sided: once the AI jury cleared a claim,
+the original artist had no recourse, and each ruling was decided in isolation
+with no memory of how earlier claims on the same work went. Both are fixed.
+
+### Added — artist `contest` (the rights holder's side of the dispute)
+
+`appeal` always let a losing *remixer* push for a better verdict. The mirror
+now exists for the *artist*:
+
+- `contest(claim_id, dispute_reason)` — payable, artist-only, on an
+  APPROVED/MODIFIED claim that has not settled. Stake is `base_deposit × 2`
+  (same immutable reference the appeal stake uses, so a REJECTED-zeroed
+  `deposit` can never mis-price it). One contest per claim.
+- The claim is re-adjudicated with the artist's argument injected into the
+  jury prompt as a RIGHTS-HOLDER DISPUTE section, weighed as a party
+  submission — persuasive only where terms and evidence bear it out.
+- **Artist wins** (a denial, or a strictly higher artist split): the new
+  verdict is applied through the shared settlement path and the stake is
+  returned to the artist via a **pull-payment**.
+- **Artist loses** (verdict unchanged or better for the remixer): the
+  clearance stands and the stake is folded into the remixer's refundable
+  escrow — the anti-griefing price of a frivolous challenge.
+- `withdraw_contest_refund(claim_id)` — artist-only pull of a won stake;
+  balance zeroed before the transfer (CEI).
+
+The "effective split" comparison uses the value `_apply_verdict` actually
+stores (APPROVED keeps the remixer's proposed split, not the jury's number),
+so a stake is never refunded for a verdict that changed nothing.
+
+### Added — precedent-aware jury (emergent on-chain case law)
+
+- `_gather_precedents()` scans a work's decided claims in deterministic code
+  (before the nondet block) and passes the last three into the leader closure.
+- The prompt now carries a **PRIOR RULINGS ON THIS WORK** section instructing
+  the jury to rule consistently or name the distinguishing fact — for both
+  first-pass adjudication and re-adjudication (appeal / contest).
+- `get_precedents(work_id)` exposes that history so anyone can audit
+  consistency, and the frontend renders it as a case-law panel.
+
+Both leader and validators build the same precedent/dispute strings through
+the closure, so consensus is unaffected: the validator still compares meaning.
+
+### Added — frontend v2.0.0
+
+- **ClaimDetail:** an artist-only "Contest this clearance" panel (textarea +
+  live stake), a contest-outcome banner, and a pull-payment "Withdraw your
+  contest stake" button — all gated on the connected wallet being the work's
+  artist.
+- **`Precedents` component:** "On-Chain Case Law for this Work", linking each
+  prior ruling; shown on every claim page.
+- **Verdict feed / card:** an `ARTIST CONTEST UPHELD` / `CONTEST REJECTED`
+  badge so two-sided disputes are visible in the public feed.
+- `get_config()` now also publishes `contest_stake_multiplier`,
+  `max_contests`, and `precedent_lookback`; the UI reads them live.
+
+### Tests
+
+45 passing (was 32). New: artist wins a contest (split raised, and
+APPROVED→REJECTED flip), artist loses and forfeits the stake to the remixer,
+artist-only + stake-floor + one-per-claim + not-after-settlement guards,
+pull-payment withdraw, `get_precedents`, and two prompt-injection-style proofs
+that precedent and the dispute argument actually reach the jury prompt.
+
+### Migration
+
+`contest` / `withdraw_contest_refund` / `get_precedents` require the v2.0.0
+address. The old app pointed at v1.2.0 keeps working for its old claims; new
+claims and disputes live on the new contract.
+
 ## [1.5.0] — 2026-08-25 (stats dashboard, reputation deep-dive, share, invariants)
 
 **Contract:** unchanged from v1.2.0

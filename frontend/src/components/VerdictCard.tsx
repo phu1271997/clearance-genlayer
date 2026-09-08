@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { EXPLORER_URL } from '../lib/genlayer';
 
-const LIVE_ORIGIN = 'https://clearance-genlayer.vercel.app';
+const LIVE_ORIGIN = 'https://clearance-genlayer-red.vercel.app';
 
 interface VerdictCardProps {
   claim: Claim;
@@ -86,6 +86,16 @@ export const VerdictCard: React.FC<VerdictCardProps> = ({ claim, txHash }) => {
               <span className="text-xs px-2.5 py-0.5 rounded-full font-mono bg-slate-900/80 text-slate-300 border border-slate-700">
                 Claim #{claim.id}
               </span>
+              {(claim as any).contest_outcome === 'ARTIST_WON' && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-purple-950/80 text-purple-300 border border-purple-500/40">
+                  ARTIST CONTEST UPHELD
+                </span>
+              )}
+              {(claim as any).contest_outcome === 'REMIXER_WON' && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-slate-800/80 text-slate-300 border border-slate-600/40">
+                  CONTEST REJECTED
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-300 mt-0.5">{style.desc}</p>
           </div>

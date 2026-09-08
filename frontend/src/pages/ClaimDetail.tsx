@@ -6,12 +6,15 @@ import { useWallet } from '../context/WalletContext';
 import { VerdictCard } from '../components/VerdictCard';
 import { PendingBanner } from '../components/PendingBanner';
 import { CopyButton } from '../components/CopyButton';
+import { Precedents } from '../components/Precedents';
 import { decodeRevert, preflightSubmit } from '../lib/preflight';
-import { Cpu, Scale, Coins, ArrowLeft, RefreshCw, ExternalLink, Globe, FileText, CheckCircle2, AlertCircle, ShieldAlert, Gavel } from 'lucide-react';
+import { Cpu, Scale, Coins, ArrowLeft, RefreshCw, ExternalLink, Globe, FileText, CheckCircle2, AlertCircle, ShieldAlert, Gavel, Landmark, Undo2 } from 'lucide-react';
 
 const SETTLEMENT_MIN_GEN_FALLBACK = 0.1;
 const APPEAL_STAKE_MULTIPLIER_FALLBACK = 2;
 const MAX_APPEALS_FALLBACK = 2;
+const CONTEST_STAKE_MULTIPLIER_FALLBACK = 2;
+const MAX_CONTESTS_FALLBACK = 1;
 
 export const ClaimDetail: React.FC = () => {
   const { claimId } = useParams<{ claimId: string }>();
@@ -26,6 +29,9 @@ export const ClaimDetail: React.FC = () => {
   const [isAdjudicating, setIsAdjudicating] = useState<boolean>(false);
   const [isDistributing, setIsDistributing] = useState<boolean>(false);
   const [isAppealing, setIsAppealing] = useState<boolean>(false);
+  const [isContesting, setIsContesting] = useState<boolean>(false);
+  const [isWithdrawing, setIsWithdrawing] = useState<boolean>(false);
+  const [contestReason, setContestReason] = useState<string>('');
   const [pendingTxHash, setPendingTxHash] = useState<string | undefined>(undefined);
   const [distributeAmount, setDistributeAmount] = useState<string>('0.1'); // 0.1 GEN
   const [actionError, setActionError] = useState<string | null>(null);
@@ -34,6 +40,8 @@ export const ClaimDetail: React.FC = () => {
   const [settlementMinGen, setSettlementMinGen] = useState<number>(SETTLEMENT_MIN_GEN_FALLBACK);
   const [appealMultiplier, setAppealMultiplier] = useState<number>(APPEAL_STAKE_MULTIPLIER_FALLBACK);
   const [maxAppeals, setMaxAppeals] = useState<number>(MAX_APPEALS_FALLBACK);
+  const [contestMultiplier, setContestMultiplier] = useState<number>(CONTEST_STAKE_MULTIPLIER_FALLBACK);
+  const [maxContests, setMaxContests] = useState<number>(MAX_CONTESTS_FALLBACK);
 
   const fetchClaimAndWork = useCallback(async () => {
     if (!claimId || !CONTRACT_ADDRESS) return;
@@ -77,6 +85,8 @@ export const ClaimDetail: React.FC = () => {
       }
       if (cfg?.appeal_stake_multiplier) setAppealMultiplier(Number(cfg.appeal_stake_multiplier));
       if (cfg?.max_appeals) setMaxAppeals(Number(cfg.max_appeals));
+      if (cfg?.contest_stake_multiplier) setContestMultiplier(Number(cfg.contest_stake_multiplier));
+      if (cfg?.max_contests) setMaxContests(Number(cfg.max_contests));
     } catch (e) {
       // Older contract w/o get_config — keep fallbacks
     }
@@ -88,6 +98,9 @@ export const ClaimDetail: React.FC = () => {
   }, [fetchClaimAndWork, fetchConfig]);
 
   const isRemixer = !!(address && claim && address.toLowerCase() === claim.remixer.toLowerCase());
+  const isArtist = !!(address && work && address.toLowerCase() === work.artist.toLowerCase());
+  const contestsUsed = Number((claim as any)?.contests ?? 0);
+  const artistRefundWei = BigInt((claim as any)?.artist_refund ?? '0');
 
   // Handle Adjudicate action
   const handleAdjudicate = async () => {
@@ -269,6 +282,116 @@ export const ClaimDetail: React.FC = () => {
     }
   };
 
+  // Handle Contest action (v2.0.0: artist-only, stake = 2× base_deposit)
+  const handleContest = async () => {
+    if (!isConnected || !address) {
+      await connect();
+      return;
+    }
+    if (!CONTRACT_ADDRESS || !claimId || !claim || !work) return;
+
+    if (!isArtist) {
+      setActionError('Only the work’s original artist may contest. Switch MetaMask to ' + work.artist + '.');
+      return;
+    }
+    if (contestReason.trim().length < 10) {
+      setActionError('Describe your objection (at least 10 characters) — the jury reads it as your dispute argument.');
+      return;
+    }
+    if (contestsUsed >= maxContests) {
+      setActionError(`This claim has already used its ${maxContests} contest.`);
+      return;
+    }
+
+    setIsContesting(true);
+    setActionError(null);
+    setSuccessMsg(null);
+    setPendingTxHash(undefined);
+
+    try {
+      // Stake is priced off the immutable base_deposit, mirroring the appeal
+      // stake — never off the live deposit (0 after a REJECTED flip).
+      const reference = claim.base_deposit ? BigInt(claim.base_deposit) : BigInt(claim.deposit);
+      const stakeWei = reference * BigInt(contestMultiplier);
+      const warn = await preflightSubmit(address, stakeWei, 'contest');
+      if (warn) {
+        setActionError(warn);
+        setIsContesting(false);
+        return;
+      }
+      const client = makeClient(address);
+      const txHash = await client.writeContract({
+        address: CONTRACT_ADDRESS as `0x${string}`,
+        functionName: 'contest',
+        args: [claimId, contestReason.trim()],
+        value: stakeWei,
+      });
+      if (typeof txHash === 'string') setPendingTxHash(txHash);
+
+      await awaitTxFinalized(client, txHash as `0x${string}`);
+
+      const updated = await client.readContract({
+        address: CONTRACT_ADDRESS as `0x${string}`,
+        functionName: 'get_claim',
+        args: [claimId],
+      }) as unknown as Claim;
+      setClaim(updated);
+      const outcome = (updated as any).contest_outcome;
+      setSuccessMsg(
+        outcome === 'ARTIST_WON'
+          ? `Contest upheld — the verdict is now ${updated.status}. Your stake is refundable below.`
+          : outcome === 'REMIXER_WON'
+            ? 'Contest rejected by the jury — the clearance stands and your stake goes to the remixer.'
+            : `Contest finalized — verdict: ${updated.status}`,
+      );
+      setContestReason('');
+      await fetchClaimAndWork();
+    } catch (err: any) {
+      console.error(err);
+      setActionError(decodeRevert(err));
+    } finally {
+      setIsContesting(false);
+    }
+  };
+
+  // Handle Withdraw contest refund (v2.0.0: pull-payment for a won contest)
+  const handleWithdrawRefund = async () => {
+    if (!isConnected || !address) {
+      await connect();
+      return;
+    }
+    if (!CONTRACT_ADDRESS || !claimId || !work) return;
+    if (!isArtist) {
+      setActionError('Only the work’s original artist may withdraw the contest stake.');
+      return;
+    }
+
+    setIsWithdrawing(true);
+    setActionError(null);
+    setSuccessMsg(null);
+    setPendingTxHash(undefined);
+
+    try {
+      const client = makeClient(address);
+      const txHash = await client.writeContract({
+        address: CONTRACT_ADDRESS as `0x${string}`,
+        functionName: 'withdraw_contest_refund',
+        args: [claimId],
+        value: BigInt(0),
+      });
+      if (typeof txHash === 'string') setPendingTxHash(txHash);
+
+      await awaitTxFinalized(client, txHash as `0x${string}`);
+      setSuccessMsg('Contest stake withdrawn back to your wallet.');
+      await fetchClaimAndWork();
+    } catch (err: any) {
+      console.error(err);
+      setActionError(decodeRevert(err));
+    } finally {
+      setIsWithdrawing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="py-20 text-center space-y-3">
@@ -316,7 +439,9 @@ export const ClaimDetail: React.FC = () => {
         </button>
       </div>
 
-      {(isAdjudicating || isDistributing || isAppealing) && <PendingBanner txHash={pendingTxHash} />}
+      {(isAdjudicating || isDistributing || isAppealing || isContesting || isWithdrawing) && (
+        <PendingBanner txHash={pendingTxHash} />
+      )}
 
       {successMsg && (
         <div className="bg-emerald-950/80 border border-emerald-500/50 rounded-2xl p-4 text-emerald-200 flex items-center gap-3">
@@ -598,7 +723,119 @@ export const ClaimDetail: React.FC = () => {
             </p>
           </div>
         )}
+
+        {/* v2.0.0 — outcome of a resolved artist contest */}
+        {(claim as any).contest_outcome === 'ARTIST_WON' && (
+          <div className="bg-purple-950/40 border border-purple-500/40 rounded-xl p-4 text-purple-200 text-xs space-y-1">
+            <div className="font-bold uppercase tracking-wider flex items-center gap-1.5">
+              <Landmark className="w-4 h-4" /> Artist contest upheld
+            </div>
+            <p className="text-slate-300">
+              The original artist challenged this clearance and the AI jury moved the
+              verdict in their favour. The contest stake is returned to the artist.
+            </p>
+          </div>
+        )}
+        {(claim as any).contest_outcome === 'REMIXER_WON' && (
+          <div className="bg-slate-800/50 border border-slate-600/40 rounded-xl p-4 text-slate-300 text-xs space-y-1">
+            <div className="font-bold uppercase tracking-wider flex items-center gap-1.5">
+              <Landmark className="w-4 h-4" /> Artist contest rejected
+            </div>
+            <p>
+              The artist challenged this clearance; the jury upheld it. The contest
+              stake was forfeited to the remixer as compensation.
+            </p>
+          </div>
+        )}
+
+        {/* v2.0.0 — artist may contest a cleared claim */}
+        {isArtist && (claim.status === 'APPROVED' || claim.status === 'MODIFIED') &&
+          !claim.distributed && contestsUsed < maxContests && (
+          <div className="bg-purple-950/30 border border-purple-500/30 rounded-xl p-4 space-y-3">
+            <div className="flex items-center gap-2 text-purple-200 text-sm font-bold">
+              <Landmark className="w-4 h-4" />
+              <span>Contest this clearance (rights holder)</span>
+            </div>
+            {(() => {
+              const referenceWei = claim.base_deposit
+                ? Number(BigInt(claim.base_deposit))
+                : Number(BigInt(claim.deposit));
+              const stakeGen = (referenceWei * contestMultiplier) / 1e18;
+              return (
+                <>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    You are the original artist. If you believe this verdict is too
+                    generous to the remixer — the split is too low, or the use should
+                    not have cleared — stake <strong>{contestMultiplier}×</strong> the
+                    original deposit ({stakeGen.toFixed(4)} GEN) to force one
+                    re-adjudication with your argument on the record. Win (a denial or a
+                    higher split) and your stake is refunded; lose and it goes to the
+                    remixer. One contest per claim.
+                  </p>
+                  <textarea
+                    value={contestReason}
+                    onChange={(e) => setContestReason(e.target.value)}
+                    rows={3}
+                    maxLength={2000}
+                    placeholder="e.g. This is a 12-second vocal loop, not a 3-second instrumental — the free tier does not apply and vocals are barred by my terms."
+                    className="w-full bg-[#0b0c13] border border-slate-700/80 rounded-xl px-3 py-2.5 text-slate-100 text-xs focus:outline-none focus:border-purple-500 resize-none"
+                  />
+                  <button
+                    onClick={handleContest}
+                    disabled={isContesting || contestReason.trim().length < 10}
+                    className="w-full sm:w-auto bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 px-6 rounded-xl text-sm transition-all shadow-lg shadow-purple-600/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {isContesting ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>AI Jury Re-adjudicating…</span>
+                      </>
+                    ) : (
+                      <>
+                        <Landmark className="w-4 h-4" />
+                        <span>Contest ({stakeGen.toFixed(4)} GEN stake)</span>
+                      </>
+                    )}
+                  </button>
+                </>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* v2.0.0 — artist pulls back a won contest stake */}
+        {isArtist && artistRefundWei > BigInt(0) && (
+          <div className="bg-emerald-950/30 border border-emerald-500/30 rounded-xl p-4 space-y-3">
+            <div className="flex items-center gap-2 text-emerald-200 text-sm font-bold">
+              <Undo2 className="w-4 h-4" />
+              <span>Withdraw your contest stake</span>
+            </div>
+            <p className="text-xs text-slate-300">
+              You have <strong>{(Number(artistRefundWei) / 1e18).toFixed(4)} GEN</strong> refundable
+              from a won contest, held under a pull-payment pattern. Withdraw it to your wallet.
+            </p>
+            <button
+              onClick={handleWithdrawRefund}
+              disabled={isWithdrawing}
+              className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-6 rounded-xl text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {isWithdrawing ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Withdrawing…</span>
+                </>
+              ) : (
+                <>
+                  <Undo2 className="w-4 h-4" />
+                  <span>Withdraw {(Number(artistRefundWei) / 1e18).toFixed(4)} GEN</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
+
+      <Precedents workId={claim.work_id} excludeId={claim.id} />
     </div>
   );
 };

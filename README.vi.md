@@ -83,13 +83,13 @@ Remixer ── submit_claim() ──┘        │
 ## Deploy hiện tại
 
 - **Mạng:** GenLayer Studio Network (`studionet`, Chain ID `61999` / `0xF1EF`)
-- **Contract v1.2.0:** `0xB9185ccb8D9b6C0667f62B2556596964536a2631` — xem trên
-  [explorer-studio.genlayer.com](https://explorer-studio.genlayer.com/address/0xB9185ccb8D9b6C0667f62B2556596964536a2631)
-- **Frontend live:** https://clearance-genlayer.vercel.app
+- **Contract v2.0.0:** `0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00` — xem trên
+  [explorer-studio.genlayer.com](https://explorer-studio.genlayer.com/address/0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00)
+- **Frontend live:** https://clearance-genlayer-red.vercel.app
 - **Verdict feed công khai** (không cần ví):
-  https://clearance-genlayer.vercel.app/verdicts
+  https://clearance-genlayer-red.vercel.app/verdicts
 - **Các trang evidence hội đồng đọc:**
-  https://clearance-genlayer.vercel.app/evidence/
+  https://clearance-genlayer-red.vercel.app/evidence/
 
 v1.3.0 nâng cấp frontend + docs, **không** đổi contract, nên **không cần
 redeploy**.
@@ -98,7 +98,7 @@ redeploy**.
 
 ## Luồng thử nghiệm nhanh
 
-1. Vào [live app](https://clearance-genlayer.vercel.app) — modal onboarding
+1. Vào [live app](https://clearance-genlayer-red.vercel.app) — modal onboarding
    sẽ giải thích 6 bước cho lần đầu ghé thăm.
 2. Vào `/verdicts` để xem verdict feed public — không cần ví.
 3. Kết nối MetaMask (app tự thêm/switch sang studionet).
@@ -118,7 +118,7 @@ redeploy**.
 ```bash
 cd frontend
 cp .env.example .env
-# Đặt VITE_CONTRACT_ADDRESS=0xB9185ccb8D9b6C0667f62B2556596964536a2631
+# Đặt VITE_CONTRACT_ADDRESS=0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00
 npm install
 npm run dev
 ```

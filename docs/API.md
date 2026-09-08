@@ -1,6 +1,6 @@
 # Clearance — Contract API Reference
 
-**Contract:** [`0xB9185ccb8D9b6C0667f62B2556596964536a2631`](https://explorer-studio.genlayer.com/address/0xB9185ccb8D9b6C0667f62B2556596964536a2631)
+**Contract:** [`0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00`](https://explorer-studio.genlayer.com/address/0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00)
 **Network:** studionet (chain id `61999` / `0xF1EF`)
 **Source:** [`contracts/clearance.py`](../contracts/clearance.py)
 
@@ -10,7 +10,7 @@ Every method below is exposed through the schema returned by
 ```bash
 curl -s -X POST https://studio.genlayer.com/api \
   -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"gen_getContractSchema","params":["0xB9185ccb8D9b6C0667f62B2556596964536a2631"]}' | jq .
+  -d '{"jsonrpc":"2.0","id":1,"method":"gen_getContractSchema","params":["0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00"]}' | jq .
 ```
 
 ## Method index
@@ -21,6 +21,8 @@ curl -s -X POST https://studio.genlayer.com/api \
 | [`submit_claim`](#submit_claim)           | write | yes | anyone         | File a remix claim against a work. Locks a 0.01 GEN deposit. |
 | [`adjudicate`](#adjudicate)               | write | no  | anyone         | Trigger the AI jury on a PENDING claim. |
 | [`appeal`](#appeal)                       | write | yes | remixer only   | Force one re-adjudication round. Stake = 2× base deposit. |
+| [`contest`](#contest)                     | write | yes | artist only    | Challenge a cleared claim. Stake = 2× base deposit. |
+| [`withdraw_contest_refund`](#withdraw_contest_refund) | write | no | artist only | Pull back a won (or errored) contest stake. |
 | [`distribute`](#distribute)               | write | yes | remixer only   | Settle an APPROVED / MODIFIED claim. Pays artist + refunds deposit. |
 | [`sweep_forfeited`](#sweep_forfeited)     | write | no  | owner only     | Withdraw only the `forfeited_final` bucket. |
 | [`get_work`](#get_work)                   | view  | –   | –              | Read one work. |
@@ -31,10 +33,11 @@ curl -s -X POST https://studio.genlayer.com/api \
 | [`list_works_by_artist`](#list_works_by_artist) | view | – | –             | Per-artist work list. |
 | [`get_reputation`](#get_reputation)       | view  | –   | –              | Per-address APPROVED / MODIFIED / REJECTED tallies. |
 | [`counts`](#counts)                       | view  | –   | –              | `works`, `claims`, `forfeited_pool`, `forfeited_final`. |
+| [`get_precedents`](#get_precedents)       | view  | –   | –              | A work's decided-claim history — the on-chain case law the jury reads. |
 | [`get_owner`](#get_owner)                 | view  | –   | –              | Owner address (drives the treasury panel visibility). |
-| [`get_config`](#get_config)               | view  | –   | –              | Contract constants (deposit, floor, appeal multiplier, cap). |
+| [`get_config`](#get_config)               | view  | –   | –              | Contract constants (deposit, floor, appeal + contest multipliers, caps). |
 
-Sixteen methods total — six write, ten view.
+Nineteen methods total — eight write, eleven view.
 
 ## Write methods
 
@@ -90,6 +93,33 @@ is not `REJECTED` / `MODIFIED`. Re-runs adjudication; on APPROVED /
 MODIFIED any parked forfeit for this claim is pulled back into the
 refundable escrow.
 
+### `contest`
+
+```python
+@gl.public.write.payable
+contest(claim_id: str, dispute_reason: str) -> None
+```
+
+The artist's mirror of `appeal`. `value >= base_deposit *
+CONTEST_STAKE_MULTIPLIER` (default 0.02 GEN). Reverts if caller ≠ the work's
+artist, if status is not `APPROVED` / `MODIFIED`, if already distributed, if
+`contests >= MAX_CONTESTS`, or if `dispute_reason` is short/long or contains
+the canary. Re-runs adjudication with the argument injected as a
+RIGHTS-HOLDER DISPUTE section. If the artist prevails (a denial, or a strictly
+higher effective split) the new verdict is applied and the stake becomes
+withdrawable; otherwise the clearance stands and the stake is folded into the
+remixer's refundable escrow. A jury ERROR (evidence unfetchable) consumes no
+contest and refunds the stake.
+
+### `withdraw_contest_refund`
+
+```python
+withdraw_contest_refund(claim_id: str) -> None
+```
+
+Artist-only pull-payment. Transfers `artist_refund` back to the artist and
+zeroes it first (CEI). Reverts if caller ≠ artist or nothing is owed.
+
 ### `distribute`
 
 ```python
@@ -136,11 +166,16 @@ get_claim(claim_id: str) -> dict
 # → { id, work_id, remixer, remix_url, declaration,
 #     proposed_split_bps, final_split_bps, status, reason,
 #     deposit, base_deposit, forfeited, distributed,
-#     ai_confidence, appeals }
+#     ai_confidence, appeals,
+#     contests, contest_stake, contest_reason,        # v2.0.0
+#     contest_outcome, artist_refund }                # v2.0.0
 ```
 
 `base_deposit` and `forfeited` were added in v1.2.0 — the frontend
-prices the appeal button off `base_deposit`.
+prices the appeal button off `base_deposit`. The `contest_*` /
+`artist_refund` fields were added in v2.0.0; `contest_outcome` is
+`""` / `"ARTIST_WON"` / `"REMIXER_WON"` and `artist_refund` is a
+stringified `bigint` (wei) pull-payment balance.
 
 ### `list_claims`
 
@@ -192,6 +227,18 @@ counts() -> {works, claims, forfeited_pool, forfeited_final}
 
 Both forfeit buckets are stringified `bigint` — treat as decimal wei.
 
+### `get_precedents`
+
+```python
+get_precedents(work_id: str) -> list[dict]
+# Newest first. Each row: id, status, final_split_bps, ai_confidence,
+# appeals, contests, contest_outcome, reason (≤ 280 chars).
+```
+
+The work's decided-claim history — the same case law the jury reads before
+ruling (the last `precedent_lookback` rows are fed into the prompt). Backs the
+"On-Chain Case Law" panel on every claim page. O(n) scan.
+
 ### `get_owner`
 
 ```python
@@ -206,6 +253,9 @@ get_config() -> {
   settlement_min: str,              # wei
   appeal_stake_multiplier: int,
   max_appeals: int,
+  contest_stake_multiplier: int,    # v2.0.0
+  max_contests: int,                # v2.0.0
+  precedent_lookback: int,          # v2.0.0
 }
 ```
 
@@ -224,14 +274,14 @@ const client = createClient({ chain: studionet, account: myAddress });
 
 // Read
 const feed = await client.readContract({
-  address: '0xB9185ccb8D9b6C0667f62B2556596964536a2631',
+  address: '0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00',
   functionName: 'list_claims',
   args: [],
 });
 
 // Write (payable)
 const hash = await client.writeContract({
-  address: '0xB9185ccb8D9b6C0667f62B2556596964536a2631',
+  address: '0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00',
   functionName: 'submit_claim',
   args: ['0', 'https://…', 'a valid declaration…', 0],
   value: 10_000_000_000_000_000n,     // 0.01 GEN
@@ -249,7 +299,7 @@ curl -s -X POST https://studio.genlayer.com/api \
     "jsonrpc":"2.0","id":1,
     "method":"gen_call",
     "params":{
-      "contract_address":"0xB9185ccb8D9b6C0667f62B2556596964536a2631",
+      "contract_address":"0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00",
       "function":"list_claims",
       "args":[]
     }

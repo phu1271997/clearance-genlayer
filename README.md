@@ -3,14 +3,16 @@
 > **An on-chain AI jury clears music samples in minutes, not months.**
 
 ![network](https://img.shields.io/badge/network-studionet-8b5cf6)
-![contract](https://img.shields.io/badge/contract-v1.2.0-22d3ee)
-![frontend](https://img.shields.io/badge/frontend-v1.5.0-a78bfa)
-![tests](https://img.shields.io/badge/tests-32%20passing-10b981)
+![contract](https://img.shields.io/badge/contract-v2.0.0-22d3ee)
+![frontend](https://img.shields.io/badge/frontend-v2.0.0-a78bfa)
+![tests](https://img.shields.io/badge/tests-45%20passing-10b981)
 ![license](https://img.shields.io/badge/license-MIT-64748b)
 
-**Current frontend:** `v1.5.0` — protocol analytics dashboard, per-address
-history, social share, formal invariant spec.  **Contract on-chain:** `v1.2.0`
-(unchanged since 2026-08-16). See [`CHANGELOG.md`](CHANGELOG.md) and
+**Current release:** `v2.0.0` — **two-sided disputes** (the original artist
+can now *contest* a clearance, not just the remixer *appeal* it) and a
+**precedent-aware AI jury** that reads a work's decided history as on-chain
+case law. This is a contract change, so v2.0.0 is a fresh studionet deploy.
+See [`CHANGELOG.md`](CHANGELOG.md) and
 [`SECURITY.md`](SECURITY.md). Vietnamese translation: [`README.vi.md`](README.vi.md).
 Step-by-step onboarding: [`docs/ONBOARDING.md`](docs/ONBOARDING.md).
 Contract method reference: [`docs/API.md`](docs/API.md).
@@ -64,6 +66,18 @@ adjudicates compliance and computes binding royalty splits.
   next appeal free. Forfeits stay **locked** while appeals remain and only
   become owner-sweepable once they are exhausted. Full model in
   [`ECONOMICS.md`](ECONOMICS.md).
+- **Two-Sided Disputes (v2.0.0).** Adjudication is symmetric. A remixer
+  who loses can `appeal`; an original artist who thinks a clearance is too
+  generous can now `contest` it, staking 2× the deposit to force one
+  re-adjudication with their written argument in front of the jury. Win a
+  contest (a denial or a higher split) and the stake is refunded via a
+  pull-payment; lose it and the stake compensates the remixer — pricing out
+  frivolous challenges. Neither side can rubber-stamp the other.
+- **Precedent-Aware Jury (v2.0.0).** Before ruling, the jury reads the
+  work's own decided history (`get_precedents`) and is instructed to rule
+  consistently with it or name the difference. Verdicts become
+  self-referential on-chain case law — a deterministic contract cannot do
+  this, because it can neither read prose rationale nor weigh a prior ruling.
 
 *Remove the AI + web layer and this becomes a Google Form. It cannot be
 built as a normal smart contract.*
@@ -86,7 +100,7 @@ Full breakdown in [`ARCHITECTURE.md`](ARCHITECTURE.md). Short version:
 |                          CLEARANCE FRONTEND (React + Vite)                        |
 +-----------------------------------------------------------------------------------+
                                        |
-                                       | adjudicate(claim_id)  /  appeal(claim_id)
+              adjudicate(claim_id) / appeal(claim_id, remixer) / contest(claim_id, artist)
                                        v
 +-----------------------------------------------------------------------------------+
 |                        GENLAYER STUDIONET INTELLIGENT CONTRACT                    |
@@ -102,6 +116,9 @@ Full breakdown in [`ARCHITECTURE.md`](ARCHITECTURE.md). Short version:
 |    - MODIFIED: final_split_bps within ±500 bps of leader                          |
 |    - confidence within ±20 points                                                 |
 |    - refuse if leader output leaks CANARY_TOKEN                                   |
+|                                                                                   |
+|    + PRIOR RULINGS on this work injected as precedent (v2.0.0)                    |
+|    + RIGHTS-HOLDER DISPUTE injected when the artist contests (v2.0.0)             |
 |                                                                                   |
 |  _apply_verdict(): update Claim, bump reputation, and move the escrow —           |
 |    APPROVED/MODIFIED -> reclaim any locked forfeit back into the deposit          |
@@ -140,18 +157,18 @@ a custom semantic `validator_fn` inside `gl.vm.run_nondet`:
 ## Deployed Contract
 
 - **Network:** GenLayer Studio Network (`studionet`, Chain ID `61999` / `0xF1EF`)
-- **Contract (v1.2.0 — current, unchanged in v1.3.0):** [`0xB9185ccb8D9b6C0667f62B2556596964536a2631`](https://explorer-studio.genlayer.com/address/0xB9185ccb8D9b6C0667f62B2556596964536a2631)
-- **Deployed:** 2026-08-16 · schema verified live via `gen_getContractSchema` (16 methods)
+- **Contract (v2.0.0 — current):** [`0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00`](https://explorer-studio.genlayer.com/address/0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00)
+- **Deployed:** 2026-09-08 · schema verified live via `gen_getContractSchema` (19 methods, adding `contest`, `withdraw_contest_refund`, `get_precedents`)
 - **Block Explorer:** https://explorer-studio.genlayer.com
 
-> v1.3.0 is a frontend, tests, sample-data and documentation release —
-> the contract bytecode is unchanged so **no redeploy is required** and
-> `VITE_CONTRACT_ADDRESS` stays at the v1.2.0 address above.
+> v2.0.0 changes the contract (two-sided disputes + precedent), so it is a
+> fresh studionet deploy at a new address. `VITE_CONTRACT_ADDRESS` points at it.
 
 ### Deprecated addresses
 
 | Version | Address | Why it was retired |
 |---|---|---|
+| v1.2.0 | `0xB9185ccb8D9b6C0667f62B2556596964536a2631` | Superseded by the v2.0.0 two-sided-dispute + precedent contract |
 | v1.1.1 | `0x5832270783938d0559BdeD7b9D8AD807b7C2D0E3` | Appeal stake priced off `deposit`, which REJECTED zeroes → post-rejection appeals were free (see CHANGELOG 1.2.0) |
 | v1.1.0 | `0xD1cbE5E47ebaE8a2c879913801ee275cfDbd0356` | Every write reverted — `DynArray[str]` reverse indices |
 | v1.0.0 | `0x6D7F886071935061B3C1C69DaA0ddb1d143Ced8E` | Superseded by the v1.1.0 security pass |
@@ -164,12 +181,12 @@ a custom semantic `validator_fn` inside `gl.vm.run_nondet`:
 
 ## Live App
 
-- **Vercel Live URL:** https://clearance-genlayer.vercel.app
-- **Public verdict feed (no wallet needed):** https://clearance-genlayer.vercel.app/verdicts
-- **Filtered feed example:** https://clearance-genlayer.vercel.app/verdicts?status=REJECTED
-- **Client-side leaderboard:** https://clearance-genlayer.vercel.app/leaderboard
-- **Protocol stats dashboard:** https://clearance-genlayer.vercel.app/stats
-- **Evidence pages the jury reads:** https://clearance-genlayer.vercel.app/evidence/
+- **Vercel Live URL:** https://clearance-genlayer-red.vercel.app
+- **Public verdict feed (no wallet needed):** https://clearance-genlayer-red.vercel.app/verdicts
+- **Filtered feed example:** https://clearance-genlayer-red.vercel.app/verdicts?status=REJECTED
+- **Client-side leaderboard:** https://clearance-genlayer-red.vercel.app/leaderboard
+- **Protocol stats dashboard:** https://clearance-genlayer-red.vercel.app/stats
+- **Evidence pages the jury reads:** https://clearance-genlayer-red.vercel.app/evidence/
 
 ---
 
@@ -181,7 +198,7 @@ so a dead or unrelated link gives the jury nothing to weigh and pushes every
 verdict toward REJECTED.
 
 To make the flow reproducible for anyone testing it, the dApp publishes four
-stable public track pages under [`/evidence/`](https://clearance-genlayer.vercel.app/evidence/):
+stable public track pages under [`/evidence/`](https://clearance-genlayer-red.vercel.app/evidence/):
 
 | Page | Scenario | Typical verdict |
 |---|---|---|
@@ -226,7 +243,7 @@ validator consensus at execution time, so the table says *typical*, not
 ```bash
 cd frontend
 cp .env.example .env
-# Set VITE_CONTRACT_ADDRESS=0xB9185ccb8D9b6C0667f62B2556596964536a2631
+# Set VITE_CONTRACT_ADDRESS=0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00
 # (or your own after redeploying to studionet)
 npm install
 npm run dev
@@ -243,7 +260,7 @@ pip install genlayer-test
 pytest tests/
 ```
 
-**32 tests, ~0.3s, no network and no LLM key required.** The suite runs on
+**45 tests, ~0.6s, no network and no LLM key required.** The suite runs on
 gltest's *direct* runner: the contract executes natively in Python against an
 in-memory VM, and `vm.mock_llm` / `vm.mock_web` supply the jury's answers, so
 every run is deterministic.
@@ -255,6 +272,12 @@ Coverage:
   rounding to zero
 - appeal flow: winning an appeal restores the forfeited escrow; the stake is
   priced off `base_deposit`; only the remixer may appeal; appeals are capped
+- **contest flow (v2.0.0):** artist wins (split raised, and APPROVED→REJECTED
+  flip), artist loses and forfeits the stake to the remixer, artist-only +
+  stake-floor + one-per-claim + not-after-settlement guards, and the
+  pull-payment withdraw
+- **precedent (v2.0.0):** `get_precedents` history, plus two proofs that the
+  prior ruling and the artist's dispute argument actually reach the jury prompt
 - forfeit buckets: locked vs final, and that `sweep_forfeited` only touches
   the final one
 - input validation at the boundary, including the prompt-injection canary

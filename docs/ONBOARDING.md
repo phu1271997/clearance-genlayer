@@ -7,13 +7,13 @@ you have never used GenLayer studionet before.
 
 You can inspect every real verdict without connecting anything.
 
-- Live site: <https://clearance-genlayer.vercel.app>
-- Public verdict feed: <https://clearance-genlayer.vercel.app/verdicts>
+- Live site: <https://clearance-genlayer-red.vercel.app>
+- Public verdict feed: <https://clearance-genlayer-red.vercel.app/verdicts>
 - Filter presets:
   - APPROVED only: `/verdicts?status=APPROVED`
   - REJECTED with "vodka" in evidence: `/verdicts?status=REJECTED&q=vodka`
 - Evidence pages the on-chain jury actually reads:
-  <https://clearance-genlayer.vercel.app/evidence/>
+  <https://clearance-genlayer-red.vercel.app/evidence/>
 
 If the feed is empty on a fresh deploy, run [`scripts/seed.mjs`](../scripts/seed.mjs)
 to register the sample works and file three claims.
@@ -22,7 +22,7 @@ to register the sample works and file three claims.
 
 Everything below is done inside MetaMask.
 
-1. Open <https://clearance-genlayer.vercel.app> and click **Connect Wallet**.
+1. Open <https://clearance-genlayer-red.vercel.app> and click **Connect Wallet**.
 2. The dApp calls `wallet_switchEthereumChain` first, and falls back to
    `wallet_addEthereumChain` — approve **either** popup.
 3. If you prefer to add the chain by hand:

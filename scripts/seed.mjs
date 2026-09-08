@@ -100,21 +100,21 @@ if ((process.env.SEED_CLAIMS ?? '1') !== '0') {
 const CLAIMS = neonRainId ? [
   {
     label: 'APPROVED — 3s instrumental loop, credited',
-    remix_url: 'https://clearance-genlayer.vercel.app/evidence/remix-approved.html',
+    remix_url: 'https://clearance-genlayer-red.vercel.app/evidence/remix-approved.html',
     declaration:
       'Halogen uses a 3-second instrumental drum loop from Neon Rain (0:52-0:55). Percussion only, no vocal material. Mira Solvang and the track title are credited in the description. Independent release, not used in any advertisement.',
     proposed_split_bps: 0,
   },
   {
     label: 'MODIFIED — 12s loop, split proposed too low',
-    remix_url: 'https://clearance-genlayer.vercel.app/evidence/remix-modified.html',
+    remix_url: 'https://clearance-genlayer-red.vercel.app/evidence/remix-modified.html',
     declaration:
       'Long Exposure loops a 12-second instrumental section of Neon Rain (0:48-1:00) through the whole track. Instrumental only, no vocals. Mira Solvang is credited. I propose a 5% royalty split.',
     proposed_split_bps: 500,
   },
   {
     label: 'REJECTED — vocal hook in an alcohol ad',
-    remix_url: 'https://clearance-genlayer.vercel.app/evidence/remix-rejected.html',
+    remix_url: 'https://clearance-genlayer-red.vercel.app/evidence/remix-rejected.html',
     declaration:
       'Hold The Line is a 58-second cut for the Vodka Nord advertising campaign built on the sampled vocal hook from Neon Rain, roughly 22 seconds of the original in total. I propose a 40% royalty split.',
     proposed_split_bps: 4000,

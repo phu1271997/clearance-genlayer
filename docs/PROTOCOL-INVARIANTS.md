@@ -137,6 +137,35 @@ invocation. There is no top-level `gl.nondet.exec_prompt` and no
 `gl.eq_principle.*` wrapper — the contract uses the base API because it
 needs the custom `validator_fn`.
 
+## 7. Two-sided dispute safety (v2.0.0)
+
+**I-22 (contest standing).** `contest(c.id, …)` reverts unless the caller
+equals `works[c.work_id].artist`, the status is `APPROVED` / `MODIFIED`, and
+the claim is not yet distributed. The remixer's own side stays `appeal`.
+
+**I-23 (contest stake floor).** The contest stake is priced off the immutable
+`base_deposit` (`base_deposit × CONTEST_STAKE_MULTIPLIER`), never the live
+`deposit`, so — like the appeal stake — it can never be free.
+
+**I-24 (bounded contests).** `c.contests` increases monotonically only on a
+resolved (non-ERROR) contest and is capped at `MAX_CONTESTS`.
+
+**I-25 (contest stake conservation).** Every contest stake ends in exactly one
+place: on an artist win it becomes `c.artist_refund` (withdrawn later by pull,
+CEI-ordered); on an artist loss it is added to `c.deposit` (the remixer's
+refundable escrow); on a jury ERROR it is returned to `c.artist_refund` and
+the contest is not consumed. It is never split, duplicated, or stranded.
+
+**I-26 (favor test uses the stored split).** "Artist favored" is judged against
+the split `_apply_verdict` actually stores (APPROVED keeps the remixer's
+proposed split), not the raw jury number — so a stake is never refunded for a
+verdict that changed nothing.
+
+**I-27 (precedent is consensus-safe).** The precedent block and any dispute
+argument are assembled in deterministic code before the nondet block and
+captured into the leader closure, so leader and every validator see identical
+prompt text; `validator_fn` still compares meaning (I-11).
+
 ## Where each invariant is tested
 
 | Invariant | Test |
@@ -161,8 +190,14 @@ needs the custom `validator_fn`.
 | I-19 | source-level (`next_*_id` counters) |
 | I-20 | source-level (locals captured before nondet block) |
 | I-21 | source-level (only `run_nondet` is used) |
+| I-22 | `test_only_the_artist_may_contest`, `test_only_cleared_claims_may_be_contested`, `test_contest_cannot_run_after_settlement` |
+| I-23 | `test_contest_requires_the_full_stake` |
+| I-24 | `test_contest_is_capped_per_claim` |
+| I-25 | `test_artist_wins_a_contest_and_the_split_is_raised`, `test_artist_loses_a_contest_and_forfeits_the_stake_to_the_remixer`, `test_artist_withdraws_a_won_contest_stake` |
+| I-26 | `test_artist_wins_a_contest_that_flips_approved_to_rejected` |
+| I-27 | `test_prior_rulings_are_injected_into_the_jury_prompt`, `test_contest_argument_is_injected_into_the_jury_prompt` |
 
-Run the suite: `pytest tests/` → 32 tests, 0.37 s, deterministic.
+Run the suite: `pytest tests/` → 45 tests, ~0.6 s, deterministic.
 
 ## What is NOT invariant
 
