@@ -5,6 +5,38 @@ export interface Work {
   source_url: string;
   license_terms: string;
   created_at: number;
+  /** v3.0.0 — derivative lineage */
+  is_derivative?: boolean;
+  parent_work_id?: string;
+  origin_claim_id?: string;
+  upstream_split_bps?: number;
+  depth?: number;
+}
+
+/** v3.0.0 — one node in a work's derivative chain (get_lineage). */
+export interface LineageNode {
+  id: string;
+  title: string;
+  artist: string;
+  is_derivative: boolean;
+  upstream_split_bps: number;
+  depth: number;
+}
+
+/** v3.0.0 — one recipient in a distribute() preview (get_settlement_plan). */
+export interface SettlementRecipient {
+  address: string;
+  role: 'derivative_artist' | 'upstream_artist' | 'original_artist' | 'remixer';
+  work_id: string;
+  amount: string; // wei
+}
+
+export interface SettlementPlan {
+  claim_id: string;
+  total: string;
+  final_split_bps: number;
+  to_artist_side: string;
+  recipients: SettlementRecipient[];
 }
 
 export interface Claim {
@@ -35,6 +67,8 @@ export interface Claim {
   contest_outcome?: ContestOutcome;
   /** v2.0.0 — stake refundable to the artist after a won contest, wei string. */
   artist_refund?: string;
+  /** v3.0.0 — the derivative Work this claim was promoted into ("" if none). */
+  derivative_work_id?: string;
 }
 
 export type ClaimStatus = 'PENDING' | 'APPROVED' | 'MODIFIED' | 'REJECTED';
@@ -97,4 +131,6 @@ export interface ContractConfig {
   contest_stake_multiplier?: number;
   max_contests?: number;
   precedent_lookback?: number;
+  /** v3.0.0 */
+  max_lineage_depth?: number;
 }

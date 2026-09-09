@@ -46,8 +46,8 @@ curl -s -X POST https://studio.genlayer.com/api \
   -d '{"jsonrpc":"2.0","id":1,"method":"gen_getContractSchema","params":["0xYOUR_ADDRESS"]}'
 ```
 
-Expect a JSON object listing the methods. v2.0.0 exposes **19**, including
-`contest`, `withdraw_contest_refund` and `get_precedents` — if those are
+Expect a JSON object listing the methods. v3.0.0 exposes **22**, including
+`register_derivative`, `get_lineage` and `get_settlement_plan` — if those are
 missing you deployed an older
 file. An error instead of a schema means the contract is not there.
 

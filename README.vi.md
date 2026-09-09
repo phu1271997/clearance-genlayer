@@ -2,7 +2,7 @@
 
 > **Một hội đồng AI on-chain phân xử clearance sample nhạc trong vài phút, không phải hàng tháng.**
 
-**Phiên bản hiện tại:** `v1.3.0` — xem [`CHANGELOG.md`](CHANGELOG.md) và [`SECURITY.md`](SECURITY.md).
+**Phiên bản hiện tại:** `v3.0.0` — xem [`CHANGELOG.md`](CHANGELOG.md) và [`SECURITY.md`](SECURITY.md).
 Bản gốc tiếng Anh: [`README.md`](README.md).
 
 ---
@@ -83,8 +83,8 @@ Remixer ── submit_claim() ──┘        │
 ## Deploy hiện tại
 
 - **Mạng:** GenLayer Studio Network (`studionet`, Chain ID `61999` / `0xF1EF`)
-- **Contract v2.0.0:** `0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00` — xem trên
-  [explorer-studio.genlayer.com](https://explorer-studio.genlayer.com/address/0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00)
+- **Contract v3.0.0:** `0x51a7eCa8b0B4c2fEe185F4d415d6DB85E0732D03` — xem trên
+  [explorer-studio.genlayer.com](https://explorer-studio.genlayer.com/address/0x51a7eCa8b0B4c2fEe185F4d415d6DB85E0732D03)
 - **Frontend live:** https://clearance-genlayer-red.vercel.app
 - **Verdict feed công khai** (không cần ví):
   https://clearance-genlayer-red.vercel.app/verdicts
@@ -118,7 +118,7 @@ redeploy**.
 ```bash
 cd frontend
 cp .env.example .env
-# Đặt VITE_CONTRACT_ADDRESS=0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00
+# Đặt VITE_CONTRACT_ADDRESS=0x51a7eCa8b0B4c2fEe185F4d415d6DB85E0732D03
 npm install
 npm run dev
 ```
@@ -134,7 +134,7 @@ pip install genlayer-test
 pytest tests/
 ```
 
-**32 tests, ~0.3s, không cần network, không cần LLM key.** Suite chạy trên
+**53 tests, ~0.6s, không cần network, không cần LLM key.** Suite chạy trên
 gltest direct runner với `vm.mock_llm` / `vm.mock_web` cheatcodes.
 
 ---

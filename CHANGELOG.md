@@ -3,6 +3,74 @@
 All notable changes to this project follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] — 2026-09-09 (derivative works + royalty cascade)
+
+**Contract:** **redeployed** — storage- and ABI-changing. New address
+`0x51a7eCa8b0B4c2fEe185F4d415d6DB85E0732D03` on studionet (22 methods, verified
+live via `gen_getContractSchema`). The v2.0.0 address
+`0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00` is deprecated.
+`VITE_CONTRACT_ADDRESS` rotated locally and on Vercel, confirmed in the bundle.
+
+Until v3.0.0 every work was a flat, standalone entry: a cleared remix was a dead
+end, and the catalog had no notion that one track was built on another. v3.0.0
+makes Clearance a **rights graph**. A cleared remix can become its own
+licensable work, sampling it pulls the whole ancestor chain into the ruling, and
+settlement cascades royalties up to every rights holder in the lineage.
+
+### Added — `register_derivative` (promote a cleared remix into a work)
+
+- `register_derivative(claim_id, title, license_terms) -> work_id` — the
+  remixer of an APPROVED/MODIFIED claim turns it into a new `Work`, once. The
+  remixer becomes the derivative's artist; its `source_url` is the remix track;
+  `upstream_split_bps` records what it owes its parent (the claim's binding
+  split); `depth = parent.depth + 1`, capped at `MAX_LINEAGE_DEPTH = 5`.
+- The originating claim stores `derivative_work_id`, which guards against
+  double-promotion.
+
+### Added — lineage-aware jury (inherited obligations are binding)
+
+- When the sampled work is itself a derivative, `_gather_lineage_terms` walks
+  the ancestor chain and injects an **UPSTREAM LICENSE OBLIGATIONS** block:
+  every ancestor's terms bind this claim too, and a downstream license can
+  never grant what an upstream one forbids. The jury reasons over inherited,
+  natural-language obligations — impossible in a deterministic contract.
+
+### Added — royalty cascade at settlement
+
+- `distribute` now splits the artist-side royalty across the lineage:
+  `_artist_settlement` walks up from the sampled work, each derivative keeping
+  its slice and passing `upstream_split_bps` of it one hop up, to the root
+  original artist. Deterministic, bounded by `MAX_LINEAGE_DEPTH`, and it degrades
+  to the old single-artist payout for an original work.
+- `get_settlement_plan(claim_id, total)` previews the exact per-recipient split
+  (every lineage leg + the remixer) without moving funds, so the UI and tests
+  share the contract's own math.
+- `get_lineage(work_id)` returns the chain root-first for the breadcrumb + audit.
+
+### Added — frontend v3.0.0
+
+- **ClaimDetail:** a remixer-only "Register your remix as a licensable work"
+  panel on a cleared claim, a live **settlement preview** on the distribute
+  panel showing who gets what (including cascaded upstream shares), and a
+  lineage breadcrumb.
+- **`Lineage` component:** the derivative chain with the per-hop upstream share,
+  shown on WorkDetail and ClaimDetail.
+- **Catalog / WorkDetail:** a `DERIVATIVE` badge and the upstream obligation.
+- `get_config()` now also publishes `max_lineage_depth`.
+
+### Tests
+
+53 passing (was 45). New: `register_derivative` creation + guards (only
+remixer, only cleared, no double-promote), lineage depth/view, the settlement
+cascade math (one hop and flat), a derivative `distribute`, and a proof that the
+UPSTREAM OBLIGATIONS block actually reaches the jury prompt.
+
+### Migration
+
+`register_derivative` / `get_lineage` / `get_settlement_plan` require the v3.0.0
+address. Old claims on the v2.0.0 contract keep working there; new lineage lives
+on the new contract.
+
 ## [2.0.0] — 2026-09-08 (two-sided disputes + precedent-aware jury)
 
 **Contract:** **redeployed** — this is a storage- and ABI-changing release.

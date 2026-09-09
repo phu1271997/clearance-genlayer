@@ -17,6 +17,15 @@ class Work:
     source_url: str
     license_terms: str     # natural language, free-form
     created_at: bigint
+    # v3.0.0 — derivative lineage -----------------------------------------
+    # A cleared remix can be promoted to its own licensable Work. Sampling
+    # that derivative pulls the WHOLE upstream chain into the ruling and into
+    # settlement, so royalties cascade to every rights holder in the lineage.
+    is_derivative: bool    # True if this work was registered from a cleared claim
+    parent_work_id: str    # the work this derivative was sampled from ("" if original)
+    origin_claim_id: str   # the cleared claim that created this derivative ("" if original)
+    upstream_split_bps: u16 # share of THIS work's artist royalties owed upstream (= origin claim's final split)
+    depth: u8              # 0 = original; parent.depth + 1 for a derivative
 
 @allow_storage
 @dataclass
@@ -55,6 +64,9 @@ class Claim:
     contest_reason: str        # the artist's dispute argument (fed to the jury)
     contest_outcome: str       # "" | "ARTIST_WON" | "REMIXER_WON"
     artist_refund: bigint      # pull-payment: stake returned to the artist on a won contest
+    # v3.0.0 — set once this claim is promoted into a derivative Work; guards
+    # against double-promotion and links a claim to the work it spawned.
+    derivative_work_id: str    # "" until register_derivative() is called on it
 
 @allow_storage
 @dataclass
@@ -87,6 +99,8 @@ MAX_APPEALS           = 2                                   # hard cap on remixe
 CONTEST_STAKE_MULTIPLIER = 2                                # artist contest stake = base_deposit * 2
 MAX_CONTESTS          = 1                                   # one artist contest per cleared claim
 PRECEDENT_LOOKBACK    = 3                                   # prior rulings on the same work fed to the jury
+# v3.0.0 — derivative lineage knobs
+MAX_LINEAGE_DEPTH     = 5                                   # cap on remix-of-a-remix chain length
 
 # Prompt-injection canary — validator refuses if leader echoes it back
 CANARY_TOKEN = "CLEARANCE_CANARY_7f3a1b_DO_NOT_ECHO"
@@ -155,6 +169,11 @@ class Contract(gl.Contract):
             source_url=source_url,
             license_terms=license_terms,
             created_at=bigint(gl.message.block_timestamp) if hasattr(gl.message, "block_timestamp") else bigint(0),
+            is_derivative=False,
+            parent_work_id="",
+            origin_claim_id="",
+            upstream_split_bps=u16(0),
+            depth=u8(0),
         )
         return wid
 
@@ -208,8 +227,70 @@ class Contract(gl.Contract):
             contest_reason="",
             contest_outcome="",
             artist_refund=bigint(0),
+            derivative_work_id="",
         )
         return cid
+
+    # -- WRITE: promote a cleared claim into a licensable derivative work -------
+
+    @gl.public.write
+    def register_derivative(self, claim_id: str, title: str, license_terms: str) -> str:
+        """
+        v3.0.0 — turn a cleared remix into its own Work so others can license
+        it in turn. Sampling the derivative later drags the WHOLE upstream
+        lineage into both the ruling and the payout: the jury is handed every
+        ancestor's terms as binding obligations, and settlement cascades a cut
+        up the chain to each rights holder.
+
+        Only the remixer of an APPROVED/MODIFIED claim may promote it, once.
+        `upstream_split_bps` records what this remix already owes its parent
+        (the claim's binding split), which is the fraction of the derivative
+        artist's future royalties that flows one hop up.
+        """
+        if claim_id not in self.claims:
+            raise gl.vm.UserError(f"claim {claim_id} not found")
+        c = self.claims[claim_id]
+        if c.status not in ("APPROVED", "MODIFIED"):
+            raise gl.vm.UserError("only a cleared (APPROVED/MODIFIED) claim can become a derivative work")
+        if c.derivative_work_id != "":
+            raise gl.vm.UserError("this claim has already been promoted to a work")
+        if _addr_str(gl.message.sender_address) != c.remixer:
+            raise gl.vm.UserError("only the remixer of the cleared claim may register the derivative")
+        if c.work_id not in self.works:
+            raise gl.vm.UserError("parent work vanished")
+        parent = self.works[c.work_id]
+        if int(parent.depth) + 1 > MAX_LINEAGE_DEPTH:
+            raise gl.vm.UserError("lineage too deep — max derivative chain length reached")
+        if not title.strip():
+            raise gl.vm.UserError("title is empty")
+        if len(license_terms.strip()) < 10:
+            raise gl.vm.UserError("license_terms too short — describe the actual license")
+        if len(license_terms) > 4000:
+            raise gl.vm.UserError("license_terms too long (max 4000 chars)")
+        if CANARY_TOKEN in license_terms:
+            raise gl.vm.UserError("license_terms contains a reserved token")
+
+        artist = _addr_str(gl.message.sender_address)   # the remixer becomes the derivative's artist
+        wid = str(self.next_work_id)
+        self.next_work_id = self.next_work_id + bigint(1)
+
+        self.works[wid] = Work(
+            id=wid,
+            artist=artist,
+            title=title,
+            source_url=c.remix_url,                     # the remix track IS the new source
+            license_terms=license_terms,
+            created_at=bigint(gl.message.block_timestamp) if hasattr(gl.message, "block_timestamp") else bigint(0),
+            is_derivative=True,
+            parent_work_id=c.work_id,
+            origin_claim_id=claim_id,
+            upstream_split_bps=u16(int(c.final_split_bps)),
+            depth=u8(int(parent.depth) + 1),
+        )
+
+        c.derivative_work_id = wid
+        self.claims[claim_id] = c
+        return wid
 
     # -- Internal: run one adjudication round ----------------------------------
 
@@ -249,6 +330,47 @@ class Contract(gl.Contract):
             return "(none — this is the first ruling on this work)"
         return "\n".join(lines)
 
+    def _walk_lineage(self, w: Work) -> list:
+        """Return the ancestor chain [immediate parent, …, root] for a work.
+        Deterministic storage walk, bounded by MAX_LINEAGE_DEPTH."""
+        chain = []
+        cursor = w
+        hops = 0
+        while cursor.is_derivative and cursor.parent_work_id in self.works and hops < MAX_LINEAGE_DEPTH:
+            parent = self.works[cursor.parent_work_id]
+            chain.append(parent)
+            cursor = parent
+            hops += 1
+        return chain
+
+    def _gather_lineage_terms(self, w: Work) -> str:
+        """
+        Build the UPSTREAM LICENSE OBLIGATIONS block. When the work being
+        sampled is itself a derivative, every ancestor's terms are binding and
+        cannot be loosened downstream — a downstream license can never grant
+        what an upstream one forbids. Handing the jury the whole chain is the
+        GenLayer-native part: it reasons about inherited, natural-language
+        obligations that a deterministic contract could never evaluate.
+        """
+        if not w.is_derivative:
+            return ""
+        lines = []
+        for anc in self._walk_lineage(w):
+            kind = "original work" if not anc.is_derivative else "upstream derivative"
+            lines.append(
+                f"- \"{anc.title}\" ({kind}, work #{anc.id}); this work owes it "
+                f"{int(w.upstream_split_bps) / 100:.2f}% upstream. Its binding terms:\n"
+                f"  {anc.license_terms[:800]}"
+            )
+        body = "\n".join(lines)
+        return (
+            "\n## UPSTREAM LICENSE OBLIGATIONS (BINDING — a derivative cannot loosen them)\n"
+            "This track is itself a licensed derivative. Every ancestor term below is\n"
+            "binding on this claim too: if any ancestor forbids a use, REJECT it even if\n"
+            "this work's own terms would allow it. Never grant downstream what upstream bars.\n"
+            f"{body}\n"
+        )
+
     def _run_adjudication(self, c: Claim, w: Work, dispute_note: str = "") -> dict:
         # Capture into local variables — nondet blocks cannot read self.*
         remix_url = c.remix_url
@@ -261,6 +383,7 @@ class Contract(gl.Contract):
         # deterministic code, so both leader and every validator see the exact
         # same strings through the closure.
         precedents = self._gather_precedents(c.work_id, c.id)
+        lineage_block = self._gather_lineage_terms(w)
         dispute_block = ""
         if dispute_note.strip():
             dispute_block = (
@@ -319,13 +442,14 @@ Earlier claims against the SAME original work were decided as follows. Treat
 them as precedent: rule consistently with them unless this claim's evidence or
 terms differ in a way you can name. Do not contradict settled precedent silently.
 {precedents}
-{dispute_block}
+{lineage_block}{dispute_block}
 ## YOUR TASK
 Judge THREE perspectives before deciding:
 1. Forensic — does public page evidence match the declaration?
-2. Legal — does the intended use satisfy the license terms literally?
+2. Legal — does the intended use satisfy the license terms literally.
 3. Skeptic — is there any red flag (undeclared sampling, prohibited context, misleading metadata)?
-Then reconcile your reading against the PRIOR RULINGS above.
+Then reconcile your reading against the PRIOR RULINGS and, if present, the
+UPSTREAM LICENSE OBLIGATIONS — any upstream prohibition is binding here.
 
 Reply with ONLY a JSON object, no markdown fences, no prose:
 {{
@@ -668,6 +792,35 @@ Decision guide:
             r.rejected = r.rejected + bigint(1)
         self.reputation[address] = r
 
+    def _artist_settlement(self, w: Work, to_artist: bigint) -> list:
+        """
+        Split the artist-side royalty across the derivative lineage.
+
+        The sampled work's artist keeps its slice; a derivative passes
+        `upstream_split_bps` of what it receives one hop up, and so on to the
+        root original. Deterministic and bounded by MAX_LINEAGE_DEPTH — returns
+        one entry per paid level so both distribute() and the settlement-plan
+        view share identical math. Zero-amount levels are dropped.
+        """
+        out = []
+        remaining = to_artist
+        cursor = w
+        hops = 0
+        while cursor.is_derivative and cursor.parent_work_id in self.works and hops < MAX_LINEAGE_DEPTH:
+            up = (remaining * bigint(int(cursor.upstream_split_bps))) // bigint(10000)
+            keep = remaining - up
+            if keep > bigint(0):
+                out.append({"address": cursor.artist, "amount": keep,
+                            "role": "derivative_artist", "work_id": cursor.id})
+            remaining = up
+            cursor = self.works[cursor.parent_work_id]
+            hops += 1
+        if remaining > bigint(0):
+            role = "original_artist" if cursor.is_derivative is False else "upstream_artist"
+            out.append({"address": cursor.artist, "amount": remaining,
+                        "role": role, "work_id": cursor.id})
+        return out
+
     # -- WRITE (payable): distribute royalty for approved/modified claim -------
 
     @gl.public.write.payable
@@ -717,16 +870,22 @@ Decision guide:
         # Refund deposit — good-faith clearance means deposit returns
         to_remixer_total = to_remixer + c.deposit
 
-        artist_addr = Address(w.artist)
         remixer_addr = Address(c.remixer)
+
+        # v3.0.0 — cascade the artist share up the derivative lineage. For an
+        # original work this is a single entry (the artist); for a derivative
+        # each ancestor takes its cut on the way up. Computed BEFORE any payout.
+        legs = self._artist_settlement(w, to_artist)
 
         # (4) Atomic finalize + payout — set flag BEFORE external calls (CEI)
         c.distributed = True
         c.deposit = bigint(0)
         self.claims[claim_id] = c
 
-        if to_artist > 0:
-            gl.get_contract_at(artist_addr).emit_transfer(value=u256(int(to_artist)))
+        for leg in legs:
+            amt = leg["amount"]
+            if amt > bigint(0):
+                gl.get_contract_at(Address(leg["address"])).emit_transfer(value=u256(int(amt)))
         if to_remixer_total > 0:
             gl.get_contract_at(remixer_addr).emit_transfer(value=u256(int(to_remixer_total)))
 
@@ -764,6 +923,11 @@ Decision guide:
             "source_url": w.source_url,
             "license_terms": w.license_terms,
             "created_at": int(w.created_at),
+            "is_derivative": w.is_derivative,
+            "parent_work_id": w.parent_work_id,
+            "origin_claim_id": w.origin_claim_id,
+            "upstream_split_bps": int(w.upstream_split_bps),
+            "depth": int(w.depth),
         }
 
     @gl.public.view
@@ -792,6 +956,81 @@ Decision guide:
             "contest_reason": c.contest_reason,
             "contest_outcome": c.contest_outcome,
             "artist_refund": str(int(c.artist_refund)),
+            "derivative_work_id": c.derivative_work_id,
+        }
+
+    @gl.public.view
+    def get_lineage(self, work_id: str) -> list:
+        """
+        The derivative chain for a work, root first ending at the work itself.
+        A single-element list means an original work. Powers the lineage
+        breadcrumb and makes the royalty cascade auditable.
+        """
+        if work_id not in self.works:
+            raise gl.vm.UserError("not found")
+        w = self.works[work_id]
+        chain = [w]
+        for anc in self._walk_lineage(w):
+            chain.append(anc)
+        chain.reverse()   # root first
+        out = []
+        for node in chain:
+            out.append({
+                "id": node.id,
+                "title": node.title,
+                "artist": node.artist,
+                "is_derivative": node.is_derivative,
+                "upstream_split_bps": int(node.upstream_split_bps),
+                "depth": int(node.depth),
+            })
+        return out
+
+    @gl.public.view
+    def get_settlement_plan(self, claim_id: str, total: str) -> dict:
+        """
+        Preview how a `distribute(total)` would split — every lineage recipient
+        and the remixer — without moving funds. Lets the UI show a breakdown
+        before a payment and makes the cascade math verifiable off-chain.
+        `total` is a decimal wei string.
+        """
+        if claim_id not in self.claims:
+            raise gl.vm.UserError("not found")
+        c = self.claims[claim_id]
+        if c.work_id not in self.works:
+            raise gl.vm.UserError("work vanished")
+        w = self.works[c.work_id]
+        try:
+            total_wei = bigint(int(total))
+        except (TypeError, ValueError):
+            raise gl.vm.UserError("total must be a decimal wei string")
+        if total_wei < bigint(0):
+            raise gl.vm.UserError("total must be non-negative")
+
+        split_bps = int(c.final_split_bps)
+        to_artist = (total_wei * bigint(split_bps)) // bigint(10000)
+        legs = self._artist_settlement(w, to_artist)
+        to_remixer = total_wei - to_artist
+
+        recipients = []
+        for leg in legs:
+            recipients.append({
+                "address": leg["address"],
+                "role": leg["role"],
+                "work_id": leg["work_id"],
+                "amount": str(int(leg["amount"])),
+            })
+        recipients.append({
+            "address": c.remixer,
+            "role": "remixer",
+            "work_id": c.work_id,
+            "amount": str(int(to_remixer)),
+        })
+        return {
+            "claim_id": c.id,
+            "total": str(int(total_wei)),
+            "final_split_bps": split_bps,
+            "to_artist_side": str(int(to_artist)),
+            "recipients": recipients,
         }
 
     @gl.public.view
@@ -861,7 +1100,12 @@ Decision guide:
             wid = str(i)
             if wid in self.works:
                 w = self.works[wid]
-                out.append({"id": w.id, "artist": w.artist, "title": w.title})
+                out.append({
+                    "id": w.id, "artist": w.artist, "title": w.title,
+                    "is_derivative": w.is_derivative,
+                    "parent_work_id": w.parent_work_id,
+                    "depth": int(w.depth),
+                })
         return out
 
     @gl.public.view
@@ -938,4 +1182,5 @@ Decision guide:
             "contest_stake_multiplier": CONTEST_STAKE_MULTIPLIER,
             "max_contests": MAX_CONTESTS,
             "precedent_lookback": PRECEDENT_LOOKBACK,
+            "max_lineage_depth": MAX_LINEAGE_DEPTH,
         }

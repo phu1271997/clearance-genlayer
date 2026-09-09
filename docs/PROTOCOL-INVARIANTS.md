@@ -166,6 +166,37 @@ argument are assembled in deterministic code before the nondet block and
 captured into the leader closure, so leader and every validator see identical
 prompt text; `validator_fn` still compares meaning (I-11).
 
+## 8. Derivative lineage & royalty cascade (v3.0.0)
+
+**I-28 (promotion standing).** `register_derivative(claim_id, …)` reverts unless
+the caller is the claim's remixer and the claim is APPROVED/MODIFIED. The new
+work's artist is that remixer.
+
+**I-29 (single promotion).** A claim can spawn at most one derivative work:
+`derivative_work_id` is set on success and blocks any further promotion.
+
+**I-30 (bounded lineage).** `depth = parent.depth + 1`, and promotion reverts
+once it would exceed `MAX_LINEAGE_DEPTH`. Every lineage walk
+(`_walk_lineage`, cascade, prompt) is bounded by the same cap.
+
+**I-31 (frozen upstream obligation).** A derivative's `upstream_split_bps` is
+fixed at promotion time to the origin claim's binding split and never mutated,
+so the cascade share both parties agreed to is stable.
+
+**I-32 (cascade conservation).** For any `total`, the settlement legs plus the
+remixer's remainder sum to exactly `total` (integer division rounds down at each
+hop; the final `remaining` carries the residue to the root). No value is minted
+or lost; the deposit refund is added on top, as before. `get_settlement_plan`
+returns the same computation `distribute` uses.
+
+**I-33 (cascade degrades to flat).** For an original work the cascade yields a
+single artist leg — byte-for-byte the pre-v3.0.0 payout.
+
+**I-34 (upstream obligations are consensus-safe).** The UPSTREAM LICENSE
+OBLIGATIONS block is assembled deterministically before the nondet block and
+captured into the leader closure, so leader and validators see identical prompt
+text (as with precedent, I-27).
+
 ## Where each invariant is tested
 
 | Invariant | Test |
@@ -196,8 +227,15 @@ prompt text; `validator_fn` still compares meaning (I-11).
 | I-25 | `test_artist_wins_a_contest_and_the_split_is_raised`, `test_artist_loses_a_contest_and_forfeits_the_stake_to_the_remixer`, `test_artist_withdraws_a_won_contest_stake` |
 | I-26 | `test_artist_wins_a_contest_that_flips_approved_to_rejected` |
 | I-27 | `test_prior_rulings_are_injected_into_the_jury_prompt`, `test_contest_argument_is_injected_into_the_jury_prompt` |
+| I-28 | `test_register_derivative_creates_a_linked_work`, `test_register_derivative_guards` |
+| I-29 | `test_register_derivative_guards` |
+| I-30 | `test_lineage_view_tracks_the_chain` |
+| I-31 | `test_register_derivative_creates_a_linked_work` |
+| I-32 | `test_settlement_plan_cascades_up_the_lineage` |
+| I-33 | `test_settlement_plan_for_an_original_work_is_flat` |
+| I-34 | `test_upstream_obligations_are_injected_for_a_derivative` |
 
-Run the suite: `pytest tests/` → 45 tests, ~0.6 s, deterministic.
+Run the suite: `pytest tests/` → 53 tests, ~0.6 s, deterministic.
 
 ## What is NOT invariant
 

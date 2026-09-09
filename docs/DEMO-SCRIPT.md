@@ -9,7 +9,7 @@ line is what the presenter says while the screen shows the paired action.
 
 - Studionet MetaMask account with **at least 1.5 GEN**.
 - `frontend/` running against
-  `VITE_CONTRACT_ADDRESS=0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00`.
+  `VITE_CONTRACT_ADDRESS=0x51a7eCa8b0B4c2fEe185F4d415d6DB85E0732D03`.
 - One work already registered (Neon Rain), one APPROVED claim already
   settled — so `/verdicts` is not empty on frame one. Run
   `node scripts/seed.mjs` if needed.

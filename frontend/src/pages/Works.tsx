@@ -8,6 +8,8 @@ interface WorkSummary {
   id: string;
   artist: string;
   title: string;
+  is_derivative?: boolean;
+  depth?: number;
 }
 
 export const Works: React.FC = () => {
@@ -124,9 +126,16 @@ export const Works: React.FC = () => {
             >
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs px-2.5 py-0.5 rounded-full font-mono bg-purple-950/80 border border-purple-500/40 text-purple-300 font-bold">
-                    Work #{w.id}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs px-2.5 py-0.5 rounded-full font-mono bg-purple-950/80 border border-purple-500/40 text-purple-300 font-bold">
+                      Work #{w.id}
+                    </span>
+                    {w.is_derivative && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-cyan-950/80 border border-cyan-500/40 text-cyan-300">
+                        DERIVATIVE
+                      </span>
+                    )}
+                  </div>
                   <FileText className="w-4 h-4 text-slate-500" />
                 </div>
 

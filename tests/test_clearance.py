@@ -857,6 +857,173 @@ def test_contest_argument_is_injected_into_the_jury_prompt(direct_vm, court, art
     assert court.get_claim(claim_id)["status"] == "REJECTED"   # mock only fired on the dispute-aware prompt
 
 
+# --- 10. Derivative works & royalty cascade (v3.0.0) --------------------------
+
+def _clear(vm, court, artist_acct, remixer_acct, work_id, verdict, split, remix_url):
+    """Submit a claim on `work_id` and drive it to `verdict`/`split`. Returns cid."""
+    vm.value = CLAIM_DEPOSIT_MIN
+    with vm.prank(remixer_acct):
+        cid = court.submit_claim(work_id, remix_url,
+                                 "A short instrumental loop, credited in the description.", split)
+    _arm_jury(vm, verdict, split, reason="cleared for the lineage test")
+    vm.value = 0
+    with vm.prank(artist_acct):
+        court.adjudicate(cid)
+    return cid
+
+
+def test_derivative_config_is_published(direct_vm, court):
+    assert court.get_config()["max_lineage_depth"] == 5
+
+
+def test_register_derivative_creates_a_linked_work(direct_vm, court, artist, remixer):
+    _register(direct_vm, court, artist)                                   # work 0
+    cid = _clear(direct_vm, court, artist, remixer, "0", "MODIFIED", 2500,
+                 "https://example.com/remix-a")
+
+    direct_vm.value = 0
+    with direct_vm.prank(remixer):
+        wid = court.register_derivative(cid, "Halogen (Long Exposure remix)",
+                                        "Instrumental re-use allowed with a 20% split. No advertising.")
+
+    w = court.get_work(wid)
+    assert w["is_derivative"] is True
+    assert w["parent_work_id"] == "0"
+    assert w["origin_claim_id"] == cid
+    assert w["upstream_split_bps"] == 2500          # inherited from the claim's binding split
+    assert w["depth"] == 1
+    assert w["artist"].lower() == _hex(remixer).lower()   # the remixer owns the derivative
+    # The claim now points at the work it spawned (guards double-promotion).
+    assert court.get_claim(cid)["derivative_work_id"] == wid
+
+
+def test_register_derivative_guards(direct_vm, court, artist, remixer, direct_charlie):
+    _register(direct_vm, court, artist)
+
+    # Not cleared yet -> cannot promote.
+    direct_vm.value = CLAIM_DEPOSIT_MIN
+    with direct_vm.prank(remixer):
+        cid = court.submit_claim("0", "https://example.com/r", "A valid declaration here.", 0)
+    direct_vm.value = 0
+    with direct_vm.prank(remixer), direct_vm.expect_revert("only a cleared"):
+        court.register_derivative(cid, "Too early", "Some derivative license terms here.")
+
+    _arm_jury(direct_vm, "APPROVED", 0)
+    direct_vm.value = 0
+    with direct_vm.prank(artist):
+        court.adjudicate(cid)
+
+    # Only the remixer may promote.
+    direct_vm.value = 0
+    with direct_vm.prank(direct_charlie), direct_vm.expect_revert("only the remixer"):
+        court.register_derivative(cid, "Wrong caller", "Some derivative license terms here.")
+
+    # Success once.
+    direct_vm.value = 0
+    with direct_vm.prank(remixer):
+        court.register_derivative(cid, "Fine", "Some derivative license terms here.")
+    # ...and not twice.
+    direct_vm.value = 0
+    with direct_vm.prank(remixer), direct_vm.expect_revert("already been promoted"):
+        court.register_derivative(cid, "Again", "Some derivative license terms here.")
+
+
+def test_lineage_view_tracks_the_chain(direct_vm, court, artist, remixer, direct_charlie):
+    _register(direct_vm, court, artist)                                   # work 0 (original)
+    c0 = _clear(direct_vm, court, artist, remixer, "0", "MODIFIED", 2500, "https://example.com/a")
+    direct_vm.value = 0
+    with direct_vm.prank(remixer):
+        w1 = court.register_derivative(c0, "Derivative one", "Instrumental re-use, 30% split.")
+
+    c1 = _clear(direct_vm, court, remixer, direct_charlie, w1, "MODIFIED", 3000, "https://example.com/b")
+    direct_vm.value = 0
+    with direct_vm.prank(direct_charlie):
+        w2 = court.register_derivative(c1, "Derivative two", "Instrumental re-use, 40% split.")
+
+    assert court.get_work(w2)["depth"] == 2
+    lineage = court.get_lineage(w2)
+    assert [n["id"] for n in lineage] == ["0", w1, w2]        # root first
+    assert lineage[0]["is_derivative"] is False
+
+
+def test_settlement_plan_cascades_up_the_lineage(direct_vm, court, artist, remixer):
+    """A payment on a derivative pays the derivative artist their slice and
+    cascades the upstream share to the original artist."""
+    _register(direct_vm, court, artist)                                   # work 0, artist A
+    c0 = _clear(direct_vm, court, artist, remixer, "0", "MODIFIED", 2500, "https://example.com/a")
+    direct_vm.value = 0
+    with direct_vm.prank(remixer):
+        w1 = court.register_derivative(c0, "Derivative", "Instrumental re-use, high split.")
+    # upstream_split_bps on w1 == 2500 (25% flows to work 0's artist)
+
+    # A new remixer (charlie) clears a claim on the derivative at 40%.
+    c1 = _clear(direct_vm, court, artist, remixer, w1, "APPROVED", 4000, "https://example.com/b")
+    # NB: for APPROVED, final_split == proposed == 4000.
+
+    plan = court.get_settlement_plan(c1, "10000")
+    assert plan["final_split_bps"] == 4000
+    assert int(plan["to_artist_side"]) == 4000                # 40% of 10000
+    by_role = {r["role"]: r for r in plan["recipients"]}
+    # derivative artist keeps 75% of the artist side, original artist gets 25%
+    assert int(by_role["derivative_artist"]["amount"]) == 3000
+    assert int(by_role["original_artist"]["amount"]) == 1000
+    assert by_role["original_artist"]["work_id"] == "0"
+    assert int(by_role["remixer"]["amount"]) == 6000          # the rest of the payment
+    # Conservation: everything sums back to the total.
+    assert sum(int(r["amount"]) for r in plan["recipients"]) == 10000
+
+
+def test_settlement_plan_for_an_original_work_is_flat(direct_vm, court, artist, remixer):
+    _register(direct_vm, court, artist)
+    cid = _clear(direct_vm, court, artist, remixer, "0", "MODIFIED", 2000, "https://example.com/a")
+    plan = court.get_settlement_plan(cid, "10000")
+    roles = {r["role"] for r in plan["recipients"]}
+    assert roles == {"original_artist", "remixer"}            # no cascade
+    by_role = {r["role"]: r for r in plan["recipients"]}
+    assert int(by_role["original_artist"]["amount"]) == 2000
+    assert int(by_role["remixer"]["amount"]) == 8000
+
+
+def test_distribute_settles_a_derivative_claim(direct_vm, court, artist, remixer, direct_charlie):
+    _register(direct_vm, court, artist)
+    c0 = _clear(direct_vm, court, artist, remixer, "0", "MODIFIED", 2500, "https://example.com/a")
+    direct_vm.value = 0
+    with direct_vm.prank(remixer):
+        w1 = court.register_derivative(c0, "Derivative", "Instrumental re-use, 40% split.")
+    c1 = _clear(direct_vm, court, remixer, direct_charlie, w1, "APPROVED", 4000, "https://example.com/b")
+
+    # The derivative's remixer (charlie) settles; cascade pays A and remixer B.
+    direct_vm.value = SETTLEMENT_MIN * 10
+    with direct_vm.prank(direct_charlie):
+        court.distribute(c1)
+    assert court.get_claim(c1)["distributed"] is True
+    assert int(court.get_claim(c1)["deposit"]) == 0
+
+
+def test_upstream_obligations_are_injected_for_a_derivative(direct_vm, court, artist, remixer, direct_charlie):
+    """A claim on a derivative must carry the ancestor's binding terms into the
+    jury prompt. Only mock a prompt that contains the UPSTREAM section."""
+    _register(direct_vm, court, artist)
+    c0 = _clear(direct_vm, court, artist, remixer, "0", "MODIFIED", 2500, "https://example.com/a")
+    direct_vm.value = 0
+    with direct_vm.prank(remixer):
+        w1 = court.register_derivative(c0, "Derivative", "Instrumental re-use permitted.")
+
+    direct_vm.value = CLAIM_DEPOSIT_MIN
+    with direct_vm.prank(direct_charlie):
+        c1 = court.submit_claim(w1, "https://example.com/b", "Sampling the derivative track.", 1000)
+
+    direct_vm.clear_mocks()
+    direct_vm.mock_web(r".*", {"status": 200, "body": "Mock track page."})
+    direct_vm.mock_llm(r"UPSTREAM LICENSE OBLIGATIONS",
+                       _verdict("APPROVED", 1000, 90, "Consistent with the binding upstream terms."))
+    direct_vm.value = 0
+    with direct_vm.prank(direct_charlie):
+        court.adjudicate(c1)
+
+    assert court.get_claim(c1)["status"] == "APPROVED"   # mock only fired on the lineage-aware prompt
+
+
 # --- helpers ------------------------------------------------------------------
 
 def _hex(address) -> str:

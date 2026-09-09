@@ -1,6 +1,6 @@
 # Clearance — Contract API Reference
 
-**Contract:** [`0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00`](https://explorer-studio.genlayer.com/address/0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00)
+**Contract:** [`0x51a7eCa8b0B4c2fEe185F4d415d6DB85E0732D03`](https://explorer-studio.genlayer.com/address/0x51a7eCa8b0B4c2fEe185F4d415d6DB85E0732D03)
 **Network:** studionet (chain id `61999` / `0xF1EF`)
 **Source:** [`contracts/clearance.py`](../contracts/clearance.py)
 
@@ -10,7 +10,7 @@ Every method below is exposed through the schema returned by
 ```bash
 curl -s -X POST https://studio.genlayer.com/api \
   -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"gen_getContractSchema","params":["0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00"]}' | jq .
+  -d '{"jsonrpc":"2.0","id":1,"method":"gen_getContractSchema","params":["0x51a7eCa8b0B4c2fEe185F4d415d6DB85E0732D03"]}' | jq .
 ```
 
 ## Method index
@@ -23,7 +23,8 @@ curl -s -X POST https://studio.genlayer.com/api \
 | [`appeal`](#appeal)                       | write | yes | remixer only   | Force one re-adjudication round. Stake = 2× base deposit. |
 | [`contest`](#contest)                     | write | yes | artist only    | Challenge a cleared claim. Stake = 2× base deposit. |
 | [`withdraw_contest_refund`](#withdraw_contest_refund) | write | no | artist only | Pull back a won (or errored) contest stake. |
-| [`distribute`](#distribute)               | write | yes | remixer only   | Settle an APPROVED / MODIFIED claim. Pays artist + refunds deposit. |
+| [`register_derivative`](#register_derivative) | write | no | remixer only | Promote a cleared remix into its own licensable work. |
+| [`distribute`](#distribute)               | write | yes | remixer only   | Settle an APPROVED / MODIFIED claim. Cascades royalties up the lineage. |
 | [`sweep_forfeited`](#sweep_forfeited)     | write | no  | owner only     | Withdraw only the `forfeited_final` bucket. |
 | [`get_work`](#get_work)                   | view  | –   | –              | Read one work. |
 | [`get_claim`](#get_claim)                 | view  | –   | –              | Read one claim including on-chain rationale. |
@@ -34,10 +35,12 @@ curl -s -X POST https://studio.genlayer.com/api \
 | [`get_reputation`](#get_reputation)       | view  | –   | –              | Per-address APPROVED / MODIFIED / REJECTED tallies. |
 | [`counts`](#counts)                       | view  | –   | –              | `works`, `claims`, `forfeited_pool`, `forfeited_final`. |
 | [`get_precedents`](#get_precedents)       | view  | –   | –              | A work's decided-claim history — the on-chain case law the jury reads. |
+| [`get_lineage`](#get_lineage)             | view  | –   | –              | A work's derivative chain, root first. |
+| [`get_settlement_plan`](#get_settlement_plan) | view | – | –              | Preview how a `distribute(total)` would split across the lineage + remixer. |
 | [`get_owner`](#get_owner)                 | view  | –   | –              | Owner address (drives the treasury panel visibility). |
-| [`get_config`](#get_config)               | view  | –   | –              | Contract constants (deposit, floor, appeal + contest multipliers, caps). |
+| [`get_config`](#get_config)               | view  | –   | –              | Contract constants (deposit, floor, appeal + contest multipliers, caps, lineage depth). |
 
-Nineteen methods total — eight write, eleven view.
+Twenty-two methods total — nine write, thirteen view.
 
 ## Write methods
 
@@ -120,6 +123,19 @@ withdraw_contest_refund(claim_id: str) -> None
 Artist-only pull-payment. Transfers `artist_refund` back to the artist and
 zeroes it first (CEI). Reverts if caller ≠ artist or nothing is owed.
 
+### `register_derivative`
+
+```python
+register_derivative(claim_id: str, title: str, license_terms: str) -> str
+```
+
+Promotes a cleared (APPROVED/MODIFIED) claim into a new licensable `Work`. The
+remixer becomes the derivative's artist; `upstream_split_bps` is inherited from
+the claim's binding split, `depth = parent.depth + 1` (capped at
+`MAX_LINEAGE_DEPTH`). Reverts if caller ≠ the claim's remixer, the claim is not
+cleared, it was already promoted (`derivative_work_id` set), the chain is too
+deep, or the title/terms are invalid. Returns the new `work_id`.
+
 ### `distribute`
 
 ```python
@@ -134,7 +150,10 @@ Four invariants, in order (see [`SECURITY.md`](../SECURITY.md) §1):
 3. if `final_split_bps > 0`, artist share must round to ≥ 1 wei;
 4. `distributed = True` is written **before** any `emit_transfer`.
 
-Refunds the deposit to the remixer.
+Refunds the deposit to the remixer. **v3.0.0:** the artist-side amount cascades
+up the derivative lineage — each ancestor takes its `upstream_split_bps` cut on
+the way to the root original artist (an original work pays a single artist, as
+before). Preview the exact split with [`get_settlement_plan`](#get_settlement_plan).
 
 ### `sweep_forfeited`
 
@@ -154,10 +173,13 @@ Every view is safe to call without a wallet.
 
 ```python
 get_work(work_id: str) -> dict
-# → { id, artist, title, source_url, license_terms, created_at }
+# → { id, artist, title, source_url, license_terms, created_at,
+#     is_derivative, parent_work_id, origin_claim_id,        # v3.0.0
+#     upstream_split_bps, depth }                            # v3.0.0
 ```
 
-Reverts with `not found` on unknown id.
+Reverts with `not found` on unknown id. For an original work `is_derivative`
+is `false`, `parent_work_id` / `origin_claim_id` are `""`, and `depth` is `0`.
 
 ### `get_claim`
 
@@ -168,7 +190,8 @@ get_claim(claim_id: str) -> dict
 #     deposit, base_deposit, forfeited, distributed,
 #     ai_confidence, appeals,
 #     contests, contest_stake, contest_reason,        # v2.0.0
-#     contest_outcome, artist_refund }                # v2.0.0
+#     contest_outcome, artist_refund,                 # v2.0.0
+#     derivative_work_id }                             # v3.0.0
 ```
 
 `base_deposit` and `forfeited` were added in v1.2.0 — the frontend
@@ -239,7 +262,30 @@ The work's decided-claim history — the same case law the jury reads before
 ruling (the last `precedent_lookback` rows are fed into the prompt). Backs the
 "On-Chain Case Law" panel on every claim page. O(n) scan.
 
-### `get_owner`
+### `get_lineage`
+
+```python
+get_lineage(work_id: str) -> list[dict]
+# Root first, ending at the work itself. Each node:
+# { id, title, artist, is_derivative, upstream_split_bps, depth }
+```
+
+A single-element list means an original work. Powers the lineage breadcrumb and
+makes the royalty cascade auditable.
+
+### `get_settlement_plan`
+
+```python
+get_settlement_plan(claim_id: str, total: str) -> dict
+# total is a decimal wei string. →
+# { claim_id, total, final_split_bps, to_artist_side,
+#   recipients: [ { address, role, work_id, amount } ] }
+# role ∈ { derivative_artist, upstream_artist, original_artist, remixer }
+```
+
+Previews how `distribute(total)` would split — every lineage leg plus the
+remixer — using the contract's own cascade math, without moving funds. The
+`amount`s sum to `total` (the deposit refund is added on top at settlement).
 
 ```python
 get_owner() -> str    # canonical 0x-hex
@@ -256,6 +302,7 @@ get_config() -> {
   contest_stake_multiplier: int,    # v2.0.0
   max_contests: int,                # v2.0.0
   precedent_lookback: int,          # v2.0.0
+  max_lineage_depth: int,           # v3.0.0
 }
 ```
 
@@ -274,14 +321,14 @@ const client = createClient({ chain: studionet, account: myAddress });
 
 // Read
 const feed = await client.readContract({
-  address: '0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00',
+  address: '0x51a7eCa8b0B4c2fEe185F4d415d6DB85E0732D03',
   functionName: 'list_claims',
   args: [],
 });
 
 // Write (payable)
 const hash = await client.writeContract({
-  address: '0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00',
+  address: '0x51a7eCa8b0B4c2fEe185F4d415d6DB85E0732D03',
   functionName: 'submit_claim',
   args: ['0', 'https://…', 'a valid declaration…', 0],
   value: 10_000_000_000_000_000n,     // 0.01 GEN
@@ -299,7 +346,7 @@ curl -s -X POST https://studio.genlayer.com/api \
     "jsonrpc":"2.0","id":1,
     "method":"gen_call",
     "params":{
-      "contract_address":"0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00",
+      "contract_address":"0x51a7eCa8b0B4c2fEe185F4d415d6DB85E0732D03",
       "function":"list_claims",
       "args":[]
     }

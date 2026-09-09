@@ -3,15 +3,17 @@
 > **An on-chain AI jury clears music samples in minutes, not months.**
 
 ![network](https://img.shields.io/badge/network-studionet-8b5cf6)
-![contract](https://img.shields.io/badge/contract-v2.0.0-22d3ee)
-![frontend](https://img.shields.io/badge/frontend-v2.0.0-a78bfa)
-![tests](https://img.shields.io/badge/tests-45%20passing-10b981)
+![contract](https://img.shields.io/badge/contract-v3.0.0-22d3ee)
+![frontend](https://img.shields.io/badge/frontend-v3.0.0-a78bfa)
+![tests](https://img.shields.io/badge/tests-53%20passing-10b981)
 ![license](https://img.shields.io/badge/license-MIT-64748b)
 
-**Current release:** `v2.0.0` — **two-sided disputes** (the original artist
-can now *contest* a clearance, not just the remixer *appeal* it) and a
-**precedent-aware AI jury** that reads a work's decided history as on-chain
-case law. This is a contract change, so v2.0.0 is a fresh studionet deploy.
+**Current release:** `v3.0.0` — **derivative works & royalty cascade**. A
+cleared remix can become its own licensable work; sampling it pulls the whole
+upstream chain into the AI ruling (upstream terms are binding downstream) and
+settlement cascades royalties back to every rights holder in the lineage. Builds
+on v2.0.0's two-sided disputes + precedent-aware jury. Contract change, so
+v3.0.0 is a fresh studionet deploy.
 See [`CHANGELOG.md`](CHANGELOG.md) and
 [`SECURITY.md`](SECURITY.md). Vietnamese translation: [`README.vi.md`](README.vi.md).
 Step-by-step onboarding: [`docs/ONBOARDING.md`](docs/ONBOARDING.md).
@@ -78,6 +80,13 @@ adjudicates compliance and computes binding royalty splits.
   consistently with it or name the difference. Verdicts become
   self-referential on-chain case law — a deterministic contract cannot do
   this, because it can neither read prose rationale nor weigh a prior ruling.
+- **Derivative Works & Royalty Cascade (v3.0.0).** A cleared remix can be
+  promoted into its own licensable work (`register_derivative`). Sampling that
+  derivative hands the jury the *whole ancestor chain* of natural-language
+  terms as binding obligations — a downstream license can never grant what an
+  upstream one forbids — and settlement cascades royalties one hop at a time up
+  to every rights holder in the lineage. Preview the split with
+  `get_settlement_plan`; walk the chain with `get_lineage`.
 
 *Remove the AI + web layer and this becomes a Google Form. It cannot be
 built as a normal smart contract.*
@@ -157,17 +166,18 @@ a custom semantic `validator_fn` inside `gl.vm.run_nondet`:
 ## Deployed Contract
 
 - **Network:** GenLayer Studio Network (`studionet`, Chain ID `61999` / `0xF1EF`)
-- **Contract (v2.0.0 — current):** [`0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00`](https://explorer-studio.genlayer.com/address/0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00)
-- **Deployed:** 2026-09-08 · schema verified live via `gen_getContractSchema` (19 methods, adding `contest`, `withdraw_contest_refund`, `get_precedents`)
+- **Contract (v3.0.0 — current):** [`0x51a7eCa8b0B4c2fEe185F4d415d6DB85E0732D03`](https://explorer-studio.genlayer.com/address/0x51a7eCa8b0B4c2fEe185F4d415d6DB85E0732D03)
+- **Deployed:** 2026-09-09 · schema verified live via `gen_getContractSchema` (22 methods, adding `register_derivative`, `get_lineage`, `get_settlement_plan`)
 - **Block Explorer:** https://explorer-studio.genlayer.com
 
-> v2.0.0 changes the contract (two-sided disputes + precedent), so it is a
+> v3.0.0 changes the contract (derivative works + royalty cascade), so it is a
 > fresh studionet deploy at a new address. `VITE_CONTRACT_ADDRESS` points at it.
 
 ### Deprecated addresses
 
 | Version | Address | Why it was retired |
 |---|---|---|
+| v2.0.0 | `0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00` | Superseded by the v3.0.0 derivative-works + royalty-cascade contract |
 | v1.2.0 | `0xB9185ccb8D9b6C0667f62B2556596964536a2631` | Superseded by the v2.0.0 two-sided-dispute + precedent contract |
 | v1.1.1 | `0x5832270783938d0559BdeD7b9D8AD807b7C2D0E3` | Appeal stake priced off `deposit`, which REJECTED zeroes → post-rejection appeals were free (see CHANGELOG 1.2.0) |
 | v1.1.0 | `0xD1cbE5E47ebaE8a2c879913801ee275cfDbd0356` | Every write reverted — `DynArray[str]` reverse indices |
@@ -243,7 +253,7 @@ validator consensus at execution time, so the table says *typical*, not
 ```bash
 cd frontend
 cp .env.example .env
-# Set VITE_CONTRACT_ADDRESS=0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00
+# Set VITE_CONTRACT_ADDRESS=0x51a7eCa8b0B4c2fEe185F4d415d6DB85E0732D03
 # (or your own after redeploying to studionet)
 npm install
 npm run dev
@@ -260,7 +270,7 @@ pip install genlayer-test
 pytest tests/
 ```
 
-**45 tests, ~0.6s, no network and no LLM key required.** The suite runs on
+**53 tests, ~0.6s, no network and no LLM key required.** The suite runs on
 gltest's *direct* runner: the contract executes natively in Python against an
 in-memory VM, and `vm.mock_llm` / `vm.mock_web` supply the jury's answers, so
 every run is deterministic.
@@ -278,6 +288,10 @@ Coverage:
   pull-payment withdraw
 - **precedent (v2.0.0):** `get_precedents` history, plus two proofs that the
   prior ruling and the artist's dispute argument actually reach the jury prompt
+- **derivative lineage (v3.0.0):** `register_derivative` creation + guards
+  (only remixer, only cleared, no double-promote), the lineage view, the
+  royalty-cascade math (one hop and flat), a derivative `distribute`, and a
+  proof that the upstream obligations reach the jury prompt
 - forfeit buckets: locked vs final, and that `sweep_forfeited` only touches
   the final one
 - input validation at the boundary, including the prompt-injection canary

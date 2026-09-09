@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { makeClient, CONTRACT_ADDRESS } from '../lib/genlayer';
 import { Work } from '../lib/types';
-import { Disc, Globe, FileText, PlusCircle, ArrowLeft, RefreshCw, ExternalLink, Clock, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
+import { Lineage } from '../components/Lineage';
+import { Disc, Globe, FileText, PlusCircle, ArrowLeft, RefreshCw, ExternalLink, Clock, CheckCircle2, AlertTriangle, XCircle, GitBranch } from 'lucide-react';
 
 export const WorkDetail: React.FC = () => {
   const { workId } = useParams<{ workId: string }>();
@@ -105,6 +106,8 @@ export const WorkDetail: React.FC = () => {
         </Link>
       </div>
 
+      <Lineage workId={work.id} />
+
       {/* Work Specification Card */}
       <div className="bg-[#121422] border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-6">
@@ -113,6 +116,11 @@ export const WorkDetail: React.FC = () => {
               <span className="text-xs px-2.5 py-0.5 rounded-full font-mono bg-purple-950/80 border border-purple-500/40 text-purple-300 font-bold">
                 Work #{work.id}
               </span>
+              {work.is_derivative && (
+                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-semibold bg-cyan-950/80 border border-cyan-500/40 text-cyan-300">
+                  <GitBranch className="w-3 h-3" /> DERIVATIVE · owes {((work.upstream_split_bps ?? 0) / 100).toFixed(0)}% upstream
+                </span>
+              )}
               {work.created_at > 0 && (
                 <span className="text-[11px] text-slate-500 font-mono">
                   Registered: {new Date(Number(work.created_at) * 1000).toLocaleDateString()}

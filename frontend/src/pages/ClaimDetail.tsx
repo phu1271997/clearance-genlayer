@@ -7,8 +7,10 @@ import { VerdictCard } from '../components/VerdictCard';
 import { PendingBanner } from '../components/PendingBanner';
 import { CopyButton } from '../components/CopyButton';
 import { Precedents } from '../components/Precedents';
+import { Lineage } from '../components/Lineage';
+import { SettlementPlan } from '../lib/types';
 import { decodeRevert, preflightSubmit } from '../lib/preflight';
-import { Cpu, Scale, Coins, ArrowLeft, RefreshCw, ExternalLink, Globe, FileText, CheckCircle2, AlertCircle, ShieldAlert, Gavel, Landmark, Undo2 } from 'lucide-react';
+import { Cpu, Scale, Coins, ArrowLeft, RefreshCw, ExternalLink, Globe, FileText, CheckCircle2, AlertCircle, ShieldAlert, Gavel, Landmark, Undo2, GitBranch } from 'lucide-react';
 
 const SETTLEMENT_MIN_GEN_FALLBACK = 0.1;
 const APPEAL_STAKE_MULTIPLIER_FALLBACK = 2;
@@ -31,7 +33,11 @@ export const ClaimDetail: React.FC = () => {
   const [isAppealing, setIsAppealing] = useState<boolean>(false);
   const [isContesting, setIsContesting] = useState<boolean>(false);
   const [isWithdrawing, setIsWithdrawing] = useState<boolean>(false);
+  const [isPromoting, setIsPromoting] = useState<boolean>(false);
   const [contestReason, setContestReason] = useState<string>('');
+  const [derivTitle, setDerivTitle] = useState<string>('');
+  const [derivTerms, setDerivTerms] = useState<string>('');
+  const [plan, setPlan] = useState<SettlementPlan | null>(null);
   const [pendingTxHash, setPendingTxHash] = useState<string | undefined>(undefined);
   const [distributeAmount, setDistributeAmount] = useState<string>('0.1'); // 0.1 GEN
   const [actionError, setActionError] = useState<string | null>(null);
@@ -96,6 +102,30 @@ export const ClaimDetail: React.FC = () => {
     fetchClaimAndWork();
     fetchConfig();
   }, [fetchClaimAndWork, fetchConfig]);
+
+  // v3.0.0 — preview how a settlement of `distributeAmount` would cascade.
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      if (!CONTRACT_ADDRESS || !claimId || !claim) return;
+      if (claim.status !== 'APPROVED' && claim.status !== 'MODIFIED') return;
+      const valNum = parseFloat(distributeAmount);
+      if (isNaN(valNum) || valNum <= 0) { setPlan(null); return; }
+      try {
+        const wei = BigInt(Math.floor(valNum * 1e18)).toString();
+        const client = makeClient();
+        const p = (await client.readContract({
+          address: CONTRACT_ADDRESS as `0x${string}`,
+          functionName: 'get_settlement_plan',
+          args: [claimId, wei],
+        })) as unknown as SettlementPlan;
+        if (live) setPlan(p && (p as any).recipients ? p : null);
+      } catch {
+        if (live) setPlan(null); // older contract without the view
+      }
+    })();
+    return () => { live = false; };
+  }, [claimId, claim, distributeAmount]);
 
   const isRemixer = !!(address && claim && address.toLowerCase() === claim.remixer.toLowerCase());
   const isArtist = !!(address && work && address.toLowerCase() === work.artist.toLowerCase());
@@ -392,6 +422,61 @@ export const ClaimDetail: React.FC = () => {
     }
   };
 
+  // Handle Register Derivative (v3.0.0: promote a cleared remix into a Work)
+  const handleRegisterDerivative = async () => {
+    if (!isConnected || !address) {
+      await connect();
+      return;
+    }
+    if (!CONTRACT_ADDRESS || !claimId || !claim) return;
+    if (!isRemixer) {
+      setActionError('Only the remixer of this cleared claim may register it as a derivative work.');
+      return;
+    }
+    if (derivTitle.trim().length < 1 || derivTerms.trim().length < 10) {
+      setActionError('Give the derivative a title and license terms (at least 10 characters).');
+      return;
+    }
+
+    setIsPromoting(true);
+    setActionError(null);
+    setSuccessMsg(null);
+    setPendingTxHash(undefined);
+
+    try {
+      const client = makeClient(address);
+      const txHash = await client.writeContract({
+        address: CONTRACT_ADDRESS as `0x${string}`,
+        functionName: 'register_derivative',
+        args: [claimId, derivTitle.trim(), derivTerms.trim()],
+        value: BigInt(0),
+      });
+      if (typeof txHash === 'string') setPendingTxHash(txHash);
+      await awaitTxFinalized(client, txHash as `0x${string}`);
+
+      const updated = await client.readContract({
+        address: CONTRACT_ADDRESS as `0x${string}`,
+        functionName: 'get_claim',
+        args: [claimId],
+      }) as unknown as Claim;
+      setClaim(updated);
+      const newWid = (updated as any).derivative_work_id;
+      setSuccessMsg(
+        newWid
+          ? `Registered as derivative Work #${newWid}. Others can now license your remix, and their settlements cascade a share back to you and the original artist.`
+          : 'Derivative registered.',
+      );
+      setDerivTitle('');
+      setDerivTerms('');
+      if (newWid) navigate(`/works/${newWid}`);
+    } catch (err: any) {
+      console.error(err);
+      setActionError(decodeRevert(err));
+    } finally {
+      setIsPromoting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="py-20 text-center space-y-3">
@@ -439,7 +524,7 @@ export const ClaimDetail: React.FC = () => {
         </button>
       </div>
 
-      {(isAdjudicating || isDistributing || isAppealing || isContesting || isWithdrawing) && (
+      {(isAdjudicating || isDistributing || isAppealing || isContesting || isWithdrawing || isPromoting) && (
         <PendingBanner txHash={pendingTxHash} />
       )}
 
@@ -458,6 +543,8 @@ export const ClaimDetail: React.FC = () => {
       )}
 
       <VerdictCard claim={claim} txHash={pendingTxHash} />
+
+      <Lineage workId={claim.work_id} />
 
       <div className="grid md:grid-cols-2 gap-6">
         {/* Original Work Context */}
@@ -661,6 +748,33 @@ export const ClaimDetail: React.FC = () => {
                 )}
               </button>
             </div>
+
+            {plan && plan.recipients && plan.recipients.length > 0 && (
+              <div className="bg-[#0b0c13] border border-slate-800 rounded-xl p-3 space-y-1.5">
+                <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold tracking-wider text-cyan-400">
+                  <GitBranch className="w-3.5 h-3.5" />
+                  <span>Settlement preview (this exact payment)</span>
+                </div>
+                {plan.recipients.map((r, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400">
+                      <span className="font-semibold text-slate-200">
+                        {r.role === 'remixer' ? 'You (remixer)'
+                          : r.role === 'derivative_artist' ? 'Derivative artist'
+                          : r.role === 'upstream_artist' ? 'Upstream artist'
+                          : 'Original artist'}
+                      </span>{' '}
+                      <span className="font-mono">{r.address.slice(0, 8)}…</span>
+                      {r.role !== 'remixer' && <span className="text-slate-600"> · work #{r.work_id}</span>}
+                    </span>
+                    <span className="font-mono text-cyan-300">{(Number(r.amount) / 1e18).toFixed(4)} GEN</span>
+                  </div>
+                ))}
+                <p className="text-[10px] text-slate-500 pt-1">
+                  Plus your 0.01 GEN deposit refunded. Upstream shares cascade automatically on-chain.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -831,6 +945,68 @@ export const ClaimDetail: React.FC = () => {
                 </>
               )}
             </button>
+          </div>
+        )}
+        {/* v3.0.0 — promote a cleared remix into its own licensable work */}
+        {isRemixer && (claim.status === 'APPROVED' || claim.status === 'MODIFIED') &&
+          !((claim as any).derivative_work_id) && (
+          <div className="bg-cyan-950/25 border border-cyan-500/30 rounded-xl p-4 space-y-3">
+            <div className="flex items-center gap-2 text-cyan-200 text-sm font-bold">
+              <GitBranch className="w-4 h-4" />
+              <span>Register your remix as a licensable work</span>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Your remix is cleared. Turn it into its own work so others can
+              license it in turn. When they do, the AI jury enforces the original
+              artist&apos;s terms on them too, and every settlement cascades a{' '}
+              <strong>{((claim.final_split_bps ?? 0) / 100).toFixed(2)}%</strong>{' '}
+              upstream share back to the original artist automatically.
+            </p>
+            <input
+              value={derivTitle}
+              onChange={(e) => setDerivTitle(e.target.value)}
+              maxLength={120}
+              placeholder="Derivative title, e.g. Halogen (Long Exposure edit)"
+              className="w-full bg-[#0b0c13] border border-slate-700/80 rounded-xl px-3 py-2.5 text-slate-100 text-xs focus:outline-none focus:border-cyan-500"
+            />
+            <textarea
+              value={derivTerms}
+              onChange={(e) => setDerivTerms(e.target.value)}
+              rows={3}
+              maxLength={4000}
+              placeholder="Your license terms for this derivative (upstream restrictions still bind). e.g. Instrumental re-use allowed with 20% split. No advertising."
+              className="w-full bg-[#0b0c13] border border-slate-700/80 rounded-xl px-3 py-2.5 text-slate-100 text-xs focus:outline-none focus:border-cyan-500 resize-none"
+            />
+            <button
+              onClick={handleRegisterDerivative}
+              disabled={isPromoting || derivTitle.trim().length < 1 || derivTerms.trim().length < 10}
+              className="w-full sm:w-auto bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2.5 px-6 rounded-xl text-sm transition-all shadow-lg shadow-cyan-600/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {isPromoting ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Registering derivative…</span>
+                </>
+              ) : (
+                <>
+                  <GitBranch className="w-4 h-4" />
+                  <span>Register derivative work</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
+        {isRemixer && (claim as any).derivative_work_id && (
+          <div className="bg-cyan-950/25 border border-cyan-500/30 rounded-xl p-4 text-cyan-200 text-xs flex items-center gap-2">
+            <GitBranch className="w-4 h-4" />
+            <span>
+              This remix is registered as{' '}
+              <button onClick={() => navigate(`/works/${(claim as any).derivative_work_id}`)}
+                      className="underline font-semibold hover:text-cyan-100">
+                Work #{(claim as any).derivative_work_id}
+              </button>. Settlements on it cascade a share back to you and the original artist.
+            </span>
           </div>
         )}
       </div>
