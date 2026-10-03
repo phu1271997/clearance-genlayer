@@ -194,12 +194,12 @@ a custom semantic `validator_fn` inside `gl.vm.run_nondet`:
 
 ## Live App
 
-- **Vercel Live URL:** https://clearance-genlayer-red.vercel.app
-- **Public verdict feed (no wallet needed):** https://clearance-genlayer-red.vercel.app/verdicts
-- **Filtered feed example:** https://clearance-genlayer-red.vercel.app/verdicts?status=REJECTED
-- **Client-side leaderboard:** https://clearance-genlayer-red.vercel.app/leaderboard
-- **Protocol stats dashboard:** https://clearance-genlayer-red.vercel.app/stats
-- **Evidence pages the jury reads:** https://clearance-genlayer-red.vercel.app/evidence/
+- **Vercel Live URL:** https://clearance-genlayer-roan.vercel.app
+- **Public verdict feed (no wallet needed):** https://clearance-genlayer-roan.vercel.app/verdicts
+- **Filtered feed example:** https://clearance-genlayer-roan.vercel.app/verdicts?status=REJECTED
+- **Client-side leaderboard:** https://clearance-genlayer-roan.vercel.app/leaderboard
+- **Protocol stats dashboard:** https://clearance-genlayer-roan.vercel.app/stats
+- **Evidence pages the jury reads:** https://clearance-genlayer-roan.vercel.app/evidence/
 
 ---
 
@@ -211,7 +211,7 @@ so a dead or unrelated link gives the jury nothing to weigh and pushes every
 verdict toward REJECTED.
 
 To make the flow reproducible for anyone testing it, the dApp publishes four
-stable public track pages under [`/evidence/`](https://clearance-genlayer-red.vercel.app/evidence/):
+stable public track pages under [`/evidence/`](https://clearance-genlayer-roan.vercel.app/evidence/):
 
 | Page | Scenario | Typical verdict |
 |---|---|---|
