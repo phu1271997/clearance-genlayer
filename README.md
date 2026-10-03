@@ -166,17 +166,20 @@ a custom semantic `validator_fn` inside `gl.vm.run_nondet`:
 ## Deployed Contract
 
 - **Network:** GenLayer Studio Network (`studionet`, Chain ID `61999` / `0xF1EF`)
-- **Contract (v3.0.0 — current):** [`0x51a7eCa8b0B4c2fEe185F4d415d6DB85E0732D03`](https://explorer-studio.genlayer.com/address/0x51a7eCa8b0B4c2fEe185F4d415d6DB85E0732D03)
-- **Deployed:** 2026-09-09 · schema verified live via `gen_getContractSchema` (22 methods, adding `register_derivative`, `get_lineage`, `get_settlement_plan`)
+- **Contract (v3.0.1 — current):** [`0x1Ae3f17678E0F12BAD81Fa76A4d902B17Ef3Acb4`](https://explorer-studio.genlayer.com/address/0x1Ae3f17678E0F12BAD81Fa76A4d902B17Ef3Acb4)
+- **Deployed:** 2026-10-03 · schema verified live via `gen_getContractSchema` (22 methods, incl. `register_derivative`, `get_lineage`, `get_settlement_plan`)
 - **Block Explorer:** https://explorer-studio.genlayer.com
 
-> v3.0.0 changes the contract (derivative works + royalty cascade), so it is a
-> fresh studionet deploy at a new address. `VITE_CONTRACT_ADDRESS` points at it.
+> v3.0.1 hardens the derivative layer (full binding ancestor terms in
+> adjudication; a child work is revoked when its origin clearance is later
+> overturned), so it is a fresh studionet deploy at a new address.
+> `VITE_CONTRACT_ADDRESS` points at it.
 
 ### Deprecated addresses
 
 | Version | Address | Why it was retired |
 |---|---|---|
+| v3.0.0 | `0x51a7eCa8b0B4c2fEe185F4d415d6DB85E0732D03` | Superseded by v3.0.1 — truncated ancestor terms + stale child after a parent overturn |
 | v2.0.0 | `0x4EF054f6f6b394dffEFBA5a6CB81713CC1545C00` | Superseded by the v3.0.0 derivative-works + royalty-cascade contract |
 | v1.2.0 | `0xB9185ccb8D9b6C0667f62B2556596964536a2631` | Superseded by the v2.0.0 two-sided-dispute + precedent contract |
 | v1.1.1 | `0x5832270783938d0559BdeD7b9D8AD807b7C2D0E3` | Appeal stake priced off `deposit`, which REJECTED zeroes → post-rejection appeals were free (see CHANGELOG 1.2.0) |
@@ -253,7 +256,7 @@ validator consensus at execution time, so the table says *typical*, not
 ```bash
 cd frontend
 cp .env.example .env
-# Set VITE_CONTRACT_ADDRESS=0x51a7eCa8b0B4c2fEe185F4d415d6DB85E0732D03
+# Set VITE_CONTRACT_ADDRESS=0x1Ae3f17678E0F12BAD81Fa76A4d902B17Ef3Acb4
 # (or your own after redeploying to studionet)
 npm install
 npm run dev

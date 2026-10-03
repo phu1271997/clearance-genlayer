@@ -1041,3 +1041,74 @@ def _hex(address) -> str:
             raw = str(address)
     raw = raw.lower()
     return raw if raw.startswith("0x") else "0x" + raw
+
+
+# --- 11. Judge-feedback regressions (v3.0.1) ----------------------------------
+
+def test_mandatory_ancestor_clause_past_800_chars_reaches_the_jury(
+    direct_vm, court, artist, remixer, direct_charlie
+):
+    """A binding clause buried past character 800 of an ancestor's license must
+    still reach a derivative claim's jury prompt. Regression for the old
+    `license_terms[:800]` truncation that silently dropped it."""
+    MARKER = "NOALCOHOLADVERTISINGCLAUSE_Z9X7"
+    filler = "Instrumental sampling is permitted with clear attribution. " * 16
+    parent_terms = filler + " MANDATORY CLAUSE: " + MARKER + " — no use in alcohol advertising."
+    assert parent_terms.index(MARKER) > 800     # the clause really is past the old cut-off
+    assert len(parent_terms) <= 4000            # still within register_work's bound
+
+    _register(direct_vm, court, artist, terms=parent_terms)                 # work 0
+    c0 = _clear(direct_vm, court, artist, remixer, "0", "APPROVED", 0, "https://example.com/a")
+    direct_vm.value = 0
+    with direct_vm.prank(remixer):
+        w1 = court.register_derivative(c0, "Derivative", "Instrumental re-use permitted.")
+
+    direct_vm.value = CLAIM_DEPOSIT_MIN
+    with direct_vm.prank(direct_charlie):
+        c1 = court.submit_claim(w1, "https://example.com/b", "Sampling the derivative track.", 1000)
+
+    # Mock ONLY a prompt that carries the ancestor's full clause. If the terms
+    # were truncated at 800, the marker would be absent, no mock would match,
+    # and adjudicate() would raise MockNotFoundError.
+    direct_vm.clear_mocks()
+    direct_vm.mock_web(r".*", {"status": 200, "body": "Mock track page."})
+    direct_vm.mock_llm(MARKER, _verdict("APPROVED", 1000, 90, "Honored the binding upstream clause."))
+    direct_vm.value = 0
+    with direct_vm.prank(direct_charlie):
+        court.adjudicate(c1)
+
+    # Fires only because the complete ancestor clause was present in the prompt.
+    assert court.get_claim(c1)["status"] == "APPROVED"
+
+
+def test_parent_contest_after_derivative_revokes_child_and_blocks_stale_payout(
+    direct_vm, court, artist, remixer, direct_charlie
+):
+    """A successful artist contest that flips the origin claim to REJECTED must
+    revoke the promoted child work and stop any stale royalty cascade on it."""
+    _register(direct_vm, court, artist)                                      # work 0, artist A
+    c0 = _clear(direct_vm, court, artist, remixer, "0", "APPROVED", 2000, "https://example.com/a")
+    direct_vm.value = 0
+    with direct_vm.prank(remixer):
+        w1 = court.register_derivative(c0, "Derivative", "Instrumental re-use, 40% split.")
+    assert court.get_work(w1)["revoked"] is False
+
+    # A downstream remixer (charlie) clears a claim on the derivative.
+    c1 = _clear(direct_vm, court, remixer, direct_charlie, w1, "APPROVED", 4000, "https://example.com/b")
+    assert court.get_claim(c1)["status"] == "APPROVED"
+
+    # Artist A contests the ORIGIN claim and the jury flips it to REJECTED.
+    _arm_jury(direct_vm, "REJECTED", 0, confidence=95, reason="Vocal hook, barred by the terms.")
+    direct_vm.value = CONTEST_STAKE
+    with direct_vm.prank(artist):
+        court.contest(c0, "That is my lead vocal, not an instrumental — vocals are barred.")
+
+    # Child validity: the origin clearance is gone, so the child is revoked.
+    assert court.get_claim(c0)["contest_outcome"] == "ARTIST_WON"
+    assert court.get_claim(c0)["status"] == "REJECTED"
+    assert court.get_work(w1)["revoked"] is True
+
+    # Final payouts: the downstream claim can no longer settle on the stale lineage.
+    direct_vm.value = SETTLEMENT_MIN * 10
+    with direct_vm.prank(direct_charlie), direct_vm.expect_revert("revoked"):
+        court.distribute(c1)

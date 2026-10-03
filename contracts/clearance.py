@@ -26,6 +26,11 @@ class Work:
     origin_claim_id: str   # the cleared claim that created this derivative ("" if original)
     upstream_split_bps: u16 # share of THIS work's artist royalties owed upstream (= origin claim's final split)
     depth: u8              # 0 = original; parent.depth + 1 for a derivative
+    # v3.0.1 — a derivative is only as valid as the parent clearance it was
+    # promoted from. If that origin claim is later overturned to REJECTED (e.g.
+    # a successful artist `contest`), this flips True: the child can no longer
+    # be settled and nothing may be derived from it. Originals are never revoked.
+    revoked: bool
 
 @allow_storage
 @dataclass
@@ -174,6 +179,7 @@ class Contract(gl.Contract):
             origin_claim_id="",
             upstream_split_bps=u16(0),
             depth=u8(0),
+            revoked=False,
         )
         return wid
 
@@ -259,6 +265,8 @@ class Contract(gl.Contract):
         if c.work_id not in self.works:
             raise gl.vm.UserError("parent work vanished")
         parent = self.works[c.work_id]
+        if parent.revoked:
+            raise gl.vm.UserError("parent work was revoked — cannot derive from an overturned clearance")
         if int(parent.depth) + 1 > MAX_LINEAGE_DEPTH:
             raise gl.vm.UserError("lineage too deep — max derivative chain length reached")
         if not title.strip():
@@ -286,6 +294,7 @@ class Contract(gl.Contract):
             origin_claim_id=claim_id,
             upstream_split_bps=u16(int(c.final_split_bps)),
             depth=u8(int(parent.depth) + 1),
+            revoked=False,
         )
 
         c.derivative_work_id = wid
@@ -360,7 +369,11 @@ class Contract(gl.Contract):
             lines.append(
                 f"- \"{anc.title}\" ({kind}, work #{anc.id}); this work owes it "
                 f"{int(w.upstream_split_bps) / 100:.2f}% upstream. Its binding terms:\n"
-                f"  {anc.license_terms[:800]}"
+                # Full ancestor terms — never truncate. A mandatory clause buried
+                # past the old 800-char cut-off was silently dropped from the
+                # binding obligations, so the jury could clear a use an upstream
+                # license forbids. register_work bounds license_terms to 4000.
+                f"  {anc.license_terms}"
             )
         body = "\n".join(lines)
         return (
@@ -767,6 +780,27 @@ Decision guide:
             self._bump_rep(c.remixer, "rejected")
 
         self.claims[claim_id] = c
+        self._sync_derivative(c)
+
+    def _sync_derivative(self, c: Claim) -> None:
+        """Keep a promoted claim's child work consistent with the claim's
+        current verdict.
+
+        A derivative work freezes `upstream_split_bps` at promotion time and is
+        implicitly valid forever. If the origin claim is later re-adjudicated
+        (remixer `appeal` or artist `contest`), that child must not be left
+        stale: a flip to REJECTED revokes it; a changed split is written back so
+        royalties never cascade on an outdated share. No-op for unpromoted claims.
+        """
+        if c.derivative_work_id == "" or c.derivative_work_id not in self.works:
+            return
+        child = self.works[c.derivative_work_id]
+        if c.status == "REJECTED":
+            child.revoked = True
+        else:  # APPROVED / MODIFIED — refresh the inherited upstream share
+            child.upstream_split_bps = u16(int(c.final_split_bps))
+            child.revoked = False
+        self.works[c.derivative_work_id] = child
 
     def _unforfeit(self, c: Claim) -> None:
         """Move this claim's parked forfeit back into its refundable escrow."""
@@ -849,6 +883,12 @@ Decision guide:
             raise gl.vm.UserError("work vanished")
         w = self.works[c.work_id]
 
+        # (0) Lineage integrity — a work whose upstream clearance was overturned
+        # may not settle. Paying out here would cascade royalties on a revoked
+        # (stale) lineage. The downstream claim stays cleared but un-settleable.
+        if w.revoked:
+            raise gl.vm.UserError("work was revoked — its upstream clearance was overturned")
+
         # (1) Payer enforcement — remixer only
         caller = _addr_str(gl.message.sender_address)
         if caller != c.remixer:
@@ -928,6 +968,7 @@ Decision guide:
             "origin_claim_id": w.origin_claim_id,
             "upstream_split_bps": int(w.upstream_split_bps),
             "depth": int(w.depth),
+            "revoked": w.revoked,
         }
 
     @gl.public.view
@@ -1105,6 +1146,7 @@ Decision guide:
                     "is_derivative": w.is_derivative,
                     "parent_work_id": w.parent_work_id,
                     "depth": int(w.depth),
+                    "revoked": w.revoked,
                 })
         return out
 
